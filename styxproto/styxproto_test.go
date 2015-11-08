@@ -1,6 +1,7 @@
 package styxproto
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -25,9 +26,14 @@ func testParseMsgFile(t *testing.T, filename string) {
 }
 
 func testParseMsg(t *testing.T, r io.Reader) {
-	p := NewParser(r)
+	p := NewScanner(r, nil)
 	for p.Next() {
-		t.Logf("%s", p.Message())
+		m := p.Msg()
+		if s, ok := m.(fmt.Stringer); ok {
+			t.Logf("%d %s", m.Tag(), s.String())
+		} else {
+			t.Logf("%d %s", m.Tag(), m)
+		}
 	}
 	if err := p.Err(); err != nil {
 		t.Error(err)
