@@ -27,6 +27,9 @@ func (m msg) Body() []byte { return m[7:] }
 // equal len(m) - 4 for non-Rread/Twrite messages.
 func (m msg) Len() int64 { return int64(guint32(m[:4])) }
 
+// Calling nthField on a message that has not been verified
+// can result in a run-time panic if the size headers are
+// incorrect.
 func (m msg) nthField(offset, n int) []byte {
 	size := int(binary.LittleEndian.Uint16(m[offset : offset+2]))
 	for i := 0; i < n; i++ {
@@ -34,58 +37,6 @@ func (m msg) nthField(offset, n int) []byte {
 		size = int(binary.LittleEndian.Uint16(m[offset : offset+2]))
 	}
 	return m[offset+2 : offset+2+size]
-}
-
-// The Stat structure describes a directory entry. It is contained in
-// Rstat and Twstat messages. Tread requests on directories return
-// a Stat structure for each directory entry.
-type Stat []byte
-
-// Size returns the length (in bytes) of the stat structure, minus the
-// two-byte size.
-func (s Stat) Size() uint16 { return guint16(s[0:2]) }
-
-// The 2-byte type field is for kernel use.
-func (s Stat) Type() uint16 { return guint16(s[2:4]) }
-
-// The 2-byte dev field is for kernel use.
-func (s Stat) Dev() uint32 { return guint32(s[4:8]) }
-
-// Qid returns the Qid of the file referenced by the Stat.
-func (s Stat) Qid() styx.Qid { return styx.Qid(s[8:21]) }
-
-// Mode contains the permissions and flags set for the file.
-// Permissions follow the unix model; the 3 least-significant
-// 3-bit triads describe read, write, and execute access for
-// owners, group members, and other users, respectively.
-func (s Stat) Mode() uint32 { return guint32(s[21:25]) }
-
-// Atime returns the last access time for the file, in seconds since the epoch.
-func (s Stat) Atime() uint32 { return binary.LittleEndian.Uint32(s[25:29]) }
-
-// Mtime returns the last time the file was modified, in seconds since the epoch.
-func (s Stat) Mtime() uint32 { return binary.LittleEndian.Uint32(s[29:33]) }
-
-// Length returns the length of the file in bytes.
-func (s Stat) Length() uint64 { return binary.LittleEndian.Uint64(s[33:41]) }
-
-// Name returns the name of the file.
-func (s Stat) Name() []byte { return msg(s).nthField(41, 0) }
-
-// Uid returns the name of the owner of the file
-func (s Stat) Uid() []byte { return msg(s).nthField(41, 1) }
-
-// Gid returns the group of the file
-func (s Stat) Gid() []byte { return msg(s).nthField(41, 2) }
-
-// Muid returns the name of the user who last modified the file
-func (s Stat) Muid() []byte { return msg(s).nthField(41, 3) }
-
-func (s Stat) String() string {
-	return fmt.Sprintf("type=%x dev=%x qid=%q mode=%o atime=%d mtime=%d "+
-		"length=%d name=%q uid=%q gid=%q muid=%q", s.Type(), s.Dev(), s.Qid(),
-		s.Mode(), s.Atime(), s.Mtime(), s.Length(), s.Name(), s.Uid(),
-		s.Gid(), s.Muid())
 }
 
 // A Msg is a 9P message. 9P messages are sent by clients (T-messages)
@@ -411,8 +362,10 @@ func (m Rwstat) Len() int64     { return int64(len(m) - 4) }
 func (m Rwstat) String() string { return "Rwstat" }
 
 // The Rread message returns the bytes requested by a Tread message.
+// To present the data portion of the message, Rread messages implement
+// the io.ReadCloser interface.
 type Rread struct {
-	io.Reader
+	io.ReadCloser
 	msg msg
 }
 
@@ -427,26 +380,38 @@ func (m Rread) String() string {
 	return fmt.Sprintf("Rread count=%d", m.Count())
 }
 
+// The Twrite message is sent by a client to write data to a file. Twrite
+// messages implement the io.ReadCloser interface for accessing
+// the data portion of the message.
 type Twrite struct {
-	io.Reader
+	io.ReadCloser
 	msg msg
 }
 
-func (m Twrite) Tag() uint16    { return m.msg.Tag() }
-func (m Twrite) Len() int64     { return m.msg.Len() }
-func (m Twrite) Fid() uint32    { return guint32(m.msg[3:7]) }
-func (m Twrite) Offset() uint64 { return guint64(m.msg[7:15]) }
-func (m Twrite) Count() uint32  { return guint32(m.msg[15:19]) }
+func (m Twrite) Tag() uint16   { return m.msg.Tag() }
+func (m Twrite) Len() int64    { return m.msg.Len() }
+func (m Twrite) Fid() uint32   { return guint32(m.msg[3:7]) }
+func (m Twrite) Offset() int64 { return int64(guint64(m.msg[7:15])) }
+func (m Twrite) Count() uint32 { return guint32(m.msg[15:19]) }
 
 func (m Twrite) String() string {
 	return fmt.Sprintf("Twrite fid=%x offset=%d count=%d",
 		m.Fid(), m.Offset(), m.Count())
 }
 
-type badMessage struct {
-	tag  uint16
-	size uint32
+// BadMessage represents an invalid message.
+type BadMessage struct {
+	Err error  // the reason the message is invalid
+	tag uint16 // the tag of the errant message
+	msg msg
 }
 
-func (m badMessage) Tag() uint16 { return m.tag }
-func (m badMessage) Len() int64  { return int64(m.size) }
+// Tag returns the tag of the errant message. Servers
+// should cite the same tag when replying with an Rerror
+// message.
+func (m BadMessage) Tag() uint16 { return m.tag }
+func (m BadMessage) Len() int64  { return m.msg.Len() }
+
+func (m BadMessage) String() string {
+	return fmt.Sprintf("bad message: %v", m.Err)
+}

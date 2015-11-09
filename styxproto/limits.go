@@ -7,6 +7,12 @@ package styxproto
 // MaxVersionLen is the maximum length of the protocol version string in bytes
 const MaxVersionLen = 20
 
+// MaxFileLen is the maximum length of a single file. While the 9P protocol
+// supports files with a length of up to 8 EB (exabytes), to reduce the risk of
+// overflow errors, the styxproto package only supports lengths of up to 4 EB
+// so that it may fit within a signed 64-bit integer.
+const MaxFileLen = 1<<63 - 1
+
 // MaxOffset is the maximum value of the offset field in Tread and Twrite requests
 const MaxOffset = 1<<63 - 1
 

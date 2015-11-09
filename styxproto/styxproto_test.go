@@ -1,6 +1,7 @@
 package styxproto
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -26,13 +27,15 @@ func testParseMsgFile(t *testing.T, filename string) {
 }
 
 func testParseMsg(t *testing.T, r io.Reader) {
-	p := NewScanner(r, nil)
+
+	p := NewScanner(bufio.NewReader(r), nil)
 	for p.Next() {
-		m := p.Msg()
-		if s, ok := m.(fmt.Stringer); ok {
-			t.Logf("%d %s", m.Tag(), s.String())
-		} else {
-			t.Logf("%d %s", m.Tag(), m)
+		for _, m := range p.Msgs() {
+			if s, ok := m.(fmt.Stringer); ok {
+				t.Logf("%d %s", m.Tag(), s.String())
+			} else {
+				t.Logf("%d %s", m.Tag(), m)
+			}
 		}
 	}
 	if err := p.Err(); err != nil {
