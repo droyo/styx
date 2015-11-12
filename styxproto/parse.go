@@ -6,10 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"io/ioutil"
-	"unicode/utf8"
-
-	"aqwari.net/net/styx"
 )
 
 var (
@@ -23,16 +19,7 @@ var (
 	guint64 = binary.LittleEndian.Uint64
 )
 
-type closer struct {
-	io.Reader
-}
-
-func (r closer) Close() error {
-	_, err := io.Copy(ioutil.Discard, r)
-	return err
-}
-
-var msgParseLUT = [...]func(msg, *bufio.Reader) (Msg, error){
+var msgParseLUT = [...]func(msg, io.Reader) (Msg, error){
 	msgTversion: parseTversion,
 	msgRversion: parseRversion,
 	msgTauth:    parseTauth,
@@ -62,230 +49,154 @@ var msgParseLUT = [...]func(msg, *bufio.Reader) (Msg, error){
 	msgRwstat:   parseRwstat,
 }
 
-func validMsgType(m uint8) bool {
-	return int(m) < len(msgParseLUT) && msgParseLUT[m] != nil
+// read just enough data to figure out the type of message and if
+// it's the right size.
+func (s *Scanner) nextHeader() (msg, error) {
+	return s.growdot(minMsgSize)
 }
 
-func fixedSize(m uint8) bool {
-	switch m {
-	case msgTversion, msgRversion, msgTauth, msgTattach:
-		fallthrough
-	case msgRerror, msgTwalk, msgRwalk, msgTcreate:
-		fallthrough
-	case msgRread, msgTwrite, msgRstat, msgTwstat:
-		return false
-	}
-	return true
-}
+// fetchMessages returns all available 9P messages from r. r must be
+// a bufio.Reader with size greater than MinBufSize. fetchMessages is
+// guaranteed to fetch at least one 9P message if err != nil.  For
+// every invalid message, a BadMessage is added to s.msg. fetchMessages
+// will only call Read if there is not enough data buffered to parse at least
+// one message.
+func (s *Scanner) fetchMessages() error {
+	var err error
+	result := s.msg[:0]
 
-func verifyQid(qid []byte) error {
-	switch styx.QidType(qid[0]) {
-	case styx.QTDIR, styx.QTAPPEND, styx.QTEXCL, styx.QTMOUNT, styx.QTAUTH, styx.QTTMP, styx.QTFILE:
-		return nil
+	for {
+		result, err = s.fetchOne(result)
+		if err != nil {
+			break
+		}
 	}
-	return errInvalidQidType
-}
-
-// check that a message is as big or as small as
-// it needs to be, given what we know about its
-// type.
-func verifySize(m msg) error {
-	t, n := m.Type(), m.Len()
-	if !validMsgType(t) {
-		return errInvalidMsgType
-	}
-	if min := int64(minSizeLUT[t]); n < min {
-		return errTooBig
-	} else if fixedSize(t) && n > min {
-		return errTooSmall
-	}
-	return nil
-}
-
-// Verify a string. Strings must be valid UTF8 sequences.
-func verifyString(data []byte) error {
-	if !utf8.Valid(data) {
-		return errInvalidUTF8
-	}
-	return nil
-}
-
-// Verify the first variable-length field. If succesful, returns
-// a nil error and the remaining data after the field.
-// If fill is true, the field is expected to fill data, minus padding.
-func verifyField(data []byte, fill bool, padding int) ([]byte, []byte, error) {
-	size := int(guint16(data[:2]))
-	if len(data) < size {
-		return nil, nil, errOverSize
-	} else if fill && size < len(data)-padding {
-		return nil, nil, errUnderSize
-	}
-	return data[:size], data[size:], nil
-}
-
-// ReadMsg returns all valid 9P messages that can be retrieved in a
-// single Read call on input. Callers must read all data in Twrite and
-// Rread messages before the next call to Parse with the same bufio.Reader.
-//
-// The byte slice buf is used to store incoming messages, and must
-// be greater than length MinBufSize. If buf is not large enough to
-// store a message, Parse will return io.ErrShortBuffer. If not enough
-// data is returned from a single read call, the error will be io.ErrShortRead.
-//
-// ReadMsg will return a non-nil error if a fatal error was encountered
-// during parsing, such as encountering io.EOF on input. For every
-// invalid message read, an item is added to bad. If no fatal error is
-// encountered, msg will contain the messages parsed, in the order
-// encountered. If an invalid message is encountered, the item added
-// to msg will be of type BadMessage.
-func ReadMsg(input *bufio.Reader, buf []byte, msgbuf []Msg) ([]Msg, error) {
-	var (
-		err  error
-		stop bool
-	)
-
-	result := msgbuf[:0]
-	bufp := buf[:]
-
-	for !stop {
-		result, stop, bufp, err = readOneMsg(input, bufp, result)
-	}
-	if err == io.ErrShortBuffer && len(result) > 0 {
-		err = nil
-	} else if err == errShortRead && len(result) > 0 {
+	if (err == bufio.ErrBufferFull || err == errShortRead) && len(result) > 0 {
 		err = nil
 	}
-	return result, err
+	s.err = err
+	s.msg = result
+	return s.err
 }
 
-// Read a single message and append it to result. Second return value is
-// true if reading must stop due to a message that extends past the buffer,
-// or a fatal error with the underlying Reader. Does not read additional data
-// from r's internal reader unless necessary.
-//
-// If the error is nil, readOneMsg guarantees that a message has been added
-// to result. Returns any remaining space in the buffer.
-func readOneMsg(r *bufio.Reader, buf []byte, result []Msg) ([]Msg, bool, []byte, error) {
-	// ReadMsg guarantees it will return at least one message.
+// fetchOne reads the next buffered message and adds it to
+// result. fetchOne will return bufio.ErrBufferFull if there is not
+// enough space in the buffer to hold the next message. fetchOne
+// will not perform additional I/O unless this is the first message being
+// parsed (len(result) == 0). fetchOne will return the offset of the
+// next message.
+func (s *Scanner) fetchOne(result []Msg) ([]Msg, error) {
+	// fetchMessages guarantees it will return at least one message.
 	first := (len(result) == 0)
 
-	if len(buf) < minMsgSize {
-		return result, true, buf, io.ErrShortBuffer
+	if s.buflen() < minMsgSize && !first {
+		return result, errShortRead
 	}
 
-	if r.Buffered() < minMsgSize && !first {
-		return result, true, buf, errShortRead
-	}
-
-	// Fill the buffer without emptying it
-	for r.Buffered() < minMsgSize {
-		if n, err := r.Read(buf[:1]); err != nil {
-			return result, true, buf[n:], err
-		}
-		if err := r.UnreadByte(); err != nil {
-			// This cannot occur if the Read error was nil
-			panic("bufio.Reader.UnreadByte after succesful Read returned error")
-		}
-	}
-
-	var (
-		dot msg
-		err error
-	)
-	dot, err = r.Peek(minMsgSize)
+	dot, err := s.nextHeader()
 	if err != nil {
-		panic("bufio.Reader.Peek() returned error but Buffered() >= minMsgSize")
+		return result, err
 	}
 
 	if err := verifySize(dot); err != nil {
-		return skipMessage(result, err, buf, r, dot, first)
+		return s.badMessage(result, dot, err)
 	}
 
-	var (
-		final = false
-		size  = dot.Len() + 4 // +4 for the 4 bytes of the size uint32
-		t     = dot.Type()
-	)
+	msgType := dot.Type()
 
-	if t == msgTwrite || t == msgRread {
-		// These messages are a special case, because they
-		// can very frequently be larger than our buffer. Rather
-		// than load the up to 4GB (max allowed by 9P), the io.Reader
-		// is passed to the client.
-		if int64(r.Buffered()) < dot.Len() {
-			// Stop parsing when we find a Twrite/Rread
-			// that extends past the buffer. This guarantees
-			// that at most one message will Read directly
-			// from the underlying Reader, letting us tell
-			// users that all Twrite/Tread messages returned
-			// by ReadMsg can be read and closed in any
-			// order, as long as they are all closed before the
-			// next call to ReadMsg.
-			final = true
-			if t == msgTwrite {
-				size = 23
-			} else {
-				size = 11
-			}
-		}
+	minSize := minSizeLUT[msgType]
+	if s.buflen()-minSize < s.dotlen() && !first {
+		return result, errShortRead
 	}
 
-	if int64(len(buf)) < size {
-		return result, true, buf, io.ErrShortBuffer
-	}
-	data := buf[:size]
-
-	if int64(r.Buffered()) < size {
-		if first {
-			if n, err := io.ReadFull(r, data); err != nil {
-				return result, true, buf[n:], err
-			}
-		} else {
-			return result, true, buf, errShortRead
-		}
-	} else if n, err := r.Read(data); int64(n) != size {
-		panic("short read of Buffered data")
-	} else if err != nil {
-		panic(err)
+	if _, err := s.growdot(minSize); err != nil {
+		return result, err
 	}
 
-	msg, err := msgParseLUT[t](data, r)
+	if msgType == msgTwrite || msgType == msgRread {
+		return s.readRW(result)
+	}
+	return s.readFixed(result)
+}
+
+// Every message besides Twrite and Rread have a small maximum size,
+// and are stored wholly in memory for convenience.
+func (s *Scanner) readFixed(result []Msg) ([]Msg, error) {
+	first := (len(result) == 0)
+	msg := msg(s.dot())
+	msgSize, msgType := msg.Len(), msg.Type()
+
+	if int64(s.buflen())+int64(s.dotlen()) < msgSize && !first {
+		return result, errShortRead
+	}
+
+	msg, err := s.growdot(int(msgSize))
+	if err != nil {
+		return result, err
+	}
+
+	parsed, err := msgParseLUT[msgType](msg, nil)
 
 	// Nothing left to read, all that's possible are parsing errors
 	if err != nil {
-		return skipMessage(result, err, buf, r, data, first)
-	} else {
-		result = append(result, msg)
+		return s.badMessage(result, msg, err)
 	}
 
-	return result, final, buf[len(data):], nil
+	s.mark()
+	return append(result, parsed), nil
 }
 
-// Skip an invalid message. If wait is true, or r wholly contains the message in
-// its buffer, a BadMessage is appended to result, and r is fast forwarded
-// past the end of the message. Otherwise, no action is taken.
-func skipMessage(result []Msg, err error, buf []byte, r *bufio.Reader, dot msg, wait bool) ([]Msg, bool, []byte, error) {
-	// Discard only takes an int, we've got an int64 (converted from a uint32)
-	const maxInt32 = 1<<31 - 1
+func (s *Scanner) readRW(result []Msg) ([]Msg, error) {
+	var err error
 
-	msgInBuffer := int64(r.Buffered()) >= dot.Len()+4
-	if wait || msgInBuffer {
-		result = append(result, BadMessage{Err: err, tag: dot.Tag()})
-		for x := dot.Len() + 4; x > 0; x -= maxInt32 {
-			n := maxInt32
-			if x < maxInt32 {
-				n = int(x)
-			}
-			if _, err := r.Discard(n); err != nil {
-				return result, true, buf, err
-			}
-		}
-		return result, !msgInBuffer, buf, nil
+	msg := msg(s.dot())
+	msgSize, msgType := msg.Len(), msg.Type()
+
+	readSize := s.buflen() + s.dotlen()
+	if int64(readSize) > msgSize {
+		readSize = int(msgSize)
 	}
-	return result, true, buf, nil
+
+	msg, err = s.growdot(readSize)
+	if err != nil {
+		panic("read of buffered data failed: " + err.Error())
+	}
+
+	parsed, err := msgParseLUT[msgType](msg, s.r)
+	if err != nil {
+		return s.badMessage(result, msg, err)
+	}
+
+	s.mark()
+	return append(result, parsed), nil
 }
 
-func parseTversion(dot msg, _ *bufio.Reader) (Msg, error) {
+func (s *Scanner) badMessage(result []Msg, bad msg, reason error) ([]Msg, error) {
+	// Invalid messages are a bit tricky; we want the caller to know right
+	// away that that an invalid message was encountered (so that he may
+	// choose to sever the connection), but if the message is not fully buffered,
+	// we do not want to perform additional I/O (and possibly block) just to
+	// skip the message. This is why the BadMessage type has a field for the
+	// number of bytes to skip, rather than the bytes themselves.
+	length := bad.Len()
+	result = append(result, BadMessage{
+		Err:    reason,
+		tag:    bad.Tag(),
+		length: length,
+	})
+	if int64(s.buflen()+s.dotlen()) <= length {
+		return result, errShortRead
+	}
+	// We can still continue parsing. This prevents one bad client
+	// from hurting performance for others on the same connection.
+	if _, err := s.growdot(int(length)); err != nil {
+		panic("read buffered data failed: " + err.Error())
+	}
+	s.mark()
+	return result, nil
+}
+
+func parseTversion(dot msg, _ io.Reader) (Msg, error) {
 	if ver, _, err := verifyField(dot.Body()[4:], true, 0); err != nil {
 		return nil, err
 	} else if err := verifyString(ver); err != nil {
@@ -296,15 +207,15 @@ func parseTversion(dot msg, _ *bufio.Reader) (Msg, error) {
 	return Tversion(dot), nil
 }
 
-func parseRversion(dot msg, _ *bufio.Reader) (Msg, error) {
-	_, err := parseTversion(dot, nil)
+func parseRversion(dot msg, _ io.Reader) (Msg, error) {
+	msg, err := parseTversion(dot, nil)
 	if err != nil {
 		return nil, err
 	}
-	return Rversion(dot), nil
+	return Rversion(msg.(Tversion)), nil
 }
 
-func parseTauth(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTauth(dot msg, _ io.Reader) (Msg, error) {
 	if err := parseTauthBody(dot.Body()); err != nil {
 		return nil, err
 	}
@@ -328,29 +239,26 @@ func parseTauthBody(body []byte) error {
 	return nil
 }
 
-func parseRauth(dot msg, _ *bufio.Reader) (Msg, error) {
-	if err := verifyQid(dot.Body()); err != nil {
-		return nil, err
-	}
+func parseRauth(dot msg, _ io.Reader) (Msg, error) {
 	return Rauth(dot), nil
 }
 
-func parseTattach(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTattach(dot msg, _ io.Reader) (Msg, error) {
 	if err := parseTauthBody(dot.Body()[4:]); err != nil {
 		return nil, err
 	}
 	return Tattach(dot), nil
 }
 
-func parseRattach(dot msg, _ *bufio.Reader) (Msg, error) {
-	_, err := parseRauth(dot, nil)
+func parseRattach(dot msg, _ io.Reader) (Msg, error) {
+	msg, err := parseRauth(dot, nil)
 	if err != nil {
 		return nil, err
 	}
-	return Rattach(dot), nil
+	return Rattach(msg.(Rauth)), nil
 }
 
-func parseRerror(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRerror(dot msg, _ io.Reader) (Msg, error) {
 	if str, _, err := verifyField(dot.Body(), true, 0); err != nil {
 		return nil, err
 	} else if err := verifyString(str); err != nil {
@@ -361,15 +269,15 @@ func parseRerror(dot msg, _ *bufio.Reader) (Msg, error) {
 	return Rerror(dot), nil
 }
 
-func parseTflush(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTflush(dot msg, _ io.Reader) (Msg, error) {
 	return Tflush(dot), nil
 }
 
-func parseRflush(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRflush(dot msg, _ io.Reader) (Msg, error) {
 	return Rflush(dot), nil
 }
 
-func parseTwalk(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTwalk(dot msg, _ io.Reader) (Msg, error) {
 	// size[4] Twalk tag[2] fid[4] newfid[4] nwname[2] nwname*(wname[s])
 	var (
 		err       error
@@ -379,7 +287,7 @@ func parseTwalk(dot msg, _ *bufio.Reader) (Msg, error) {
 	if nwelem > MaxWElem {
 		return nil, errMaxWElem
 	}
-	if dot.Len() < int64(nwelem)*2 {
+	if dot.Len() < int64(minSizeLUT[msgTwalk])+int64(nwelem)*2 {
 		return nil, errOverSize
 	}
 	elems = dot.Body()[10:]
@@ -397,38 +305,31 @@ func parseTwalk(dot msg, _ *bufio.Reader) (Msg, error) {
 	return Twalk(dot), nil
 }
 
-func parseRwalk(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRwalk(dot msg, _ io.Reader) (Msg, error) {
 	nwqid := guint16(dot.Body()[:2])
 	if nwqid > MaxWElem {
 		return nil, errMaxWElem
 	}
 
-	if sz, real := dot.Len(), int64(nwqid)*13; real < sz {
-		return nil, errUnderSize
-	} else if real > sz {
+	msgSize := dot.Len()
+	realSize := int64(minSizeLUT[msgRwalk]) + int64(nwqid)*13
+	if realSize < msgSize {
+		//return nil, errUnderSize
+	} else if realSize > msgSize {
 		return nil, errOverSize
-	}
-
-	for i := uint16(0); i < nwqid; i++ {
-		if err := verifyQid(dot.Body()[i*13 : (i+1)*13]); err != nil {
-			return nil, err
-		}
 	}
 	return Rwalk(dot), nil
 }
 
-func parseTopen(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTopen(dot msg, _ io.Reader) (Msg, error) {
 	return Topen(dot), nil
 }
 
-func parseRopen(dot msg, _ *bufio.Reader) (Msg, error) {
-	if err := verifyQid(dot.Body()[:13]); err != nil {
-		return nil, err
-	}
+func parseRopen(dot msg, _ io.Reader) (Msg, error) {
 	return Ropen(dot), nil
 }
 
-func parseTcreate(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTcreate(dot msg, _ io.Reader) (Msg, error) {
 	if name, _, err := verifyField(dot.Body()[4:], true, 5); err != nil {
 		return nil, err
 	} else if err := verifyString(name); err != nil {
@@ -439,54 +340,56 @@ func parseTcreate(dot msg, _ *bufio.Reader) (Msg, error) {
 	return Tcreate(dot), nil
 }
 
-func parseRcreate(dot msg, _ *bufio.Reader) (Msg, error) {
-	_, err := parseRopen(dot, nil)
+func parseRcreate(dot msg, _ io.Reader) (Msg, error) {
+	msg, err := parseRopen(dot, nil)
 	if err != nil {
 		return nil, err
 	}
-	return Rcreate(dot), nil
+	return Rcreate(msg.(Ropen)), nil
 }
 
-func parseTread(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTread(dot msg, _ io.Reader) (Msg, error) {
 	// size[4] Tread tag[2] fid[4] offset[8] count[4]
 	return Tread(dot), nil
 }
 
-func parseRread(dot msg, r *bufio.Reader) (Msg, error) {
+func parseRread(dot msg, r io.Reader) (Msg, error) {
 	// size[4] Rread tag[2] count[4] data[count]
-	count := int64(guint32(dot.Body()[:4]))
-	msgSize := dot.Len() + 4
+	m := Rread{msg: dot}
 
-	realSize := count + 11
+	count := m.Count()
+	msgSize := m.Len()
+
+	realSize := count + int64(minSizeLUT[msgRread])
 	if realSize < msgSize {
 		return nil, errUnderSize
 	} else if realSize > msgSize {
 		return nil, errOverSize
 	}
 
-	if int64(len(dot)) == msgSize {
-		return Rread{
-			ReadCloser: closer{bytes.NewReader(dot[11:])},
-			msg:        dot,
-		}, nil
+	buffered := dot[minSizeLUT[msgRread]:]
+	m.Reader = bytes.NewReader(buffered)
+	if int64(len(buffered)) < msgSize {
+		m.Reader = io.MultiReader(
+			m.Reader,
+			io.LimitReader(r, count-int64(len(buffered))))
 	}
-	return Rread{
-		ReadCloser: closer{io.LimitReader(r, count)},
-		msg:        dot,
-	}, nil
+
+	return m, nil
 }
 
-func parseTwrite(dot msg, input *bufio.Reader) (Msg, error) {
+func parseTwrite(dot msg, r io.Reader) (Msg, error) {
 	// size[4] Twrite tag[2] fid[4] offset[8] count[4]  data[count]
-	offset := guint64(dot.Body()[4:12])
+	m := Twrite{msg: dot}
+	offset := m.Offset()
 	if offset > MaxOffset {
 		return nil, errMaxOffset
 	}
 
-	count := int64(guint32(dot.Body()[12:16]))
-	msgSize := dot.Len()
+	count := m.Count()
+	msgSize := m.Len()
 
-	realSize := count + 23
+	realSize := count + int64(minSizeLUT[msgTwrite])
 	if realSize < msgSize {
 		return nil, errUnderSize
 	}
@@ -494,43 +397,42 @@ func parseTwrite(dot msg, input *bufio.Reader) (Msg, error) {
 		return nil, errOverSize
 	}
 
-	if int64(len(dot)) == msgSize {
-		return Twrite{
-			ReadCloser: closer{bytes.NewReader(dot[11:])},
-			msg:        dot,
-		}, nil
+	buffered := dot[minSizeLUT[msgTwrite]:]
+	m.Reader = bytes.NewReader(buffered)
+	if int64(len(buffered)) < msgSize {
+		m.Reader = io.MultiReader(
+			m.Reader,
+			io.LimitReader(r, count-int64(len(buffered))))
 	}
-	return Twrite{
-		ReadCloser: closer{io.LimitReader(input, count)},
-		msg:        dot,
-	}, nil
+
+	return m, nil
 }
 
-func parseRwrite(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRwrite(dot msg, _ io.Reader) (Msg, error) {
 	return Rwrite(dot), nil
 }
 
-func parseTclunk(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTclunk(dot msg, _ io.Reader) (Msg, error) {
 	return Tclunk(dot), nil
 }
 
-func parseRclunk(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRclunk(dot msg, _ io.Reader) (Msg, error) {
 	return Rclunk(dot), nil
 }
 
-func parseTremove(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTremove(dot msg, _ io.Reader) (Msg, error) {
 	return Tremove(dot), nil
 }
 
-func parseRremove(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRremove(dot msg, _ io.Reader) (Msg, error) {
 	return Rremove(dot), nil
 }
 
-func parseTstat(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTstat(dot msg, _ io.Reader) (Msg, error) {
 	return Tstat(dot), nil
 }
 
-func parseRstat(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRstat(dot msg, _ io.Reader) (Msg, error) {
 	stat, _, err := verifyField(dot.Body(), true, 0)
 	if err != nil {
 		return nil, err
@@ -541,7 +443,7 @@ func parseRstat(dot msg, _ *bufio.Reader) (Msg, error) {
 	return Rstat(dot), nil
 }
 
-func parseTwstat(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseTwstat(dot msg, _ io.Reader) (Msg, error) {
 	stat, _, err := verifyField(dot.Body(), true, 0)
 	if err != nil {
 		return nil, err
@@ -552,6 +454,6 @@ func parseTwstat(dot msg, _ *bufio.Reader) (Msg, error) {
 	return Twstat(dot), nil
 }
 
-func parseRwstat(dot msg, _ *bufio.Reader) (Msg, error) {
+func parseRwstat(dot msg, _ io.Reader) (Msg, error) {
 	return Rwstat(dot), nil
 }

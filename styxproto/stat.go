@@ -78,9 +78,6 @@ func verifyStat(data []byte) error {
 	if length := guint64(data[31:39]); length > MaxFileLen {
 		return errLongLength
 	}
-	if err := verifyQid(data[6:19]); err != nil {
-		return err
-	}
 	name, rest, err := verifyField(data[39:], false, 6)
 	if err != nil {
 		return err
