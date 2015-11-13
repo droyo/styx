@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"aqwari.net/net/styx"
 )
 
 // This package does not unmarshal messages into structures.
@@ -147,7 +145,7 @@ func (m Rauth) Len() int64    { return msg(m).Len() }
 func (m Rauth) nbytes() int64 { return msg(m).nbytes() }
 
 // The aqid of an Rauth message must be of type QTAUTH.
-func (m Rauth) Aqid() styx.Qid { return styx.Qid(m[7:20]) }
+func (m Rauth) Aqid() Qid      { return Qid(m[7:20]) }
 func (m Rauth) String() string { return fmt.Sprintf("Rauth aqid=%q", m.Aqid()) }
 
 // The attach message serves as a fresh introduction from a  user on
@@ -186,7 +184,7 @@ func (m Rattach) nbytes() int64 { return msg(m).nbytes() }
 
 // Qid is the qid of the root of the file tree. Qid is associated
 // with the fid of the corresponding Tattach request.
-func (m Rattach) Qid() styx.Qid  { return styx.Qid(m[7:20]) }
+func (m Rattach) Qid() Qid       { return Qid(m[7:20]) }
 func (m Rattach) String() string { return fmt.Sprintf("Rattach qid=%q", m.Qid()) }
 
 type Rerror []byte
@@ -241,11 +239,19 @@ func (m Twalk) String() string {
 
 type Rwalk []byte
 
-func (m Rwalk) Tag() uint16         { return msg(m).Tag() }
-func (m Rwalk) Len() int64          { return msg(m).Len() }
-func (m Rwalk) nbytes() int64       { return msg(m).nbytes() }
-func (m Rwalk) Nwqid() int          { return int(guint16(m[7:9])) }
-func (m Rwalk) Wqid(n int) styx.Qid { return styx.Qid(m[9+n*13 : 9+(n+1)*13]) }
+func (m Rwalk) Tag() uint16   { return msg(m).Tag() }
+func (m Rwalk) Len() int64    { return msg(m).Len() }
+func (m Rwalk) nbytes() int64 { return msg(m).nbytes() }
+
+// Nwqid must always be equal to or lesser than Nwname of the corresponding
+// Twalk request. Only if Nwqid is equal to Nwname is the Newfid of
+// the Twalk request established. Nwqid must always be greater than
+// zero.
+func (m Rwalk) Nwqid() int { return int(guint16(m[7:9])) }
+
+// Wqid contains the Qid values of each path in the walk
+// requested by the client, up to the first failure.
+func (m Rwalk) Wqid(n int) Qid { return Qid(m[9+n*13 : 9+(n+1)*13]) }
 
 func (m Rwalk) String() string {
 	var buf [MaxWElem]string
@@ -273,7 +279,14 @@ type Ropen []byte
 func (m Ropen) Tag() uint16   { return msg(m).Tag() }
 func (m Ropen) Len() int64    { return msg(m).Len() }
 func (m Ropen) nbytes() int64 { return msg(m).nbytes() }
-func (m Ropen) Qid() styx.Qid { return styx.Qid(m[7:20]) }
+
+// Qid contains the unique identifier of the opened file.
+func (m Ropen) Qid() Qid { return Qid(m[7:20]) }
+
+// The iounit field returned by open and create may be zero.  If it
+// is not, it is the maximum number of bytes that are guaranteed to
+// be read from or written to the file without breaking the I/O transfer
+// into multiple 9P messages
 func (m Ropen) IOunit() int64 { return int64(guint32(m[20:24])) }
 func (m Ropen) String() string {
 	return fmt.Sprintf("Ropen qid=%q iounit=%d", m.Qid(), m.IOunit())
@@ -302,7 +315,7 @@ type Rcreate []byte
 func (m Rcreate) Tag() uint16   { return msg(m).Tag() }
 func (m Rcreate) Len() int64    { return msg(m).Len() }
 func (m Rcreate) nbytes() int64 { return msg(m).nbytes() }
-func (m Rcreate) Qid() styx.Qid { return styx.Qid(m[7:20]) }
+func (m Rcreate) Qid() Qid      { return Qid(m[7:20]) }
 func (m Rcreate) IOunit() int64 { return int64(guint32(m[20:24])) }
 func (m Rcreate) String() string {
 	return fmt.Sprintf("Rcreate qid=%q iounit=%d", m.Qid(), m.IOunit())

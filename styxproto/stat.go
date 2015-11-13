@@ -3,8 +3,7 @@ package styxproto
 import (
 	"encoding/binary"
 	"fmt"
-
-	"aqwari.net/net/styx"
+	"io"
 )
 
 // The Stat structure describes a directory entry. It is contained in
@@ -26,7 +25,8 @@ func (s Stat) Type() uint16 { return guint16(s[2:4]) }
 func (s Stat) Dev() uint32 { return guint32(s[4:8]) }
 
 // Qid returns the unique identifier of the file.
-func (s Stat) Qid() styx.Qid { return styx.Qid(s[8:21]) }
+func (s Stat) Qid() Qid     { return Qid(s[8:21]) }
+func (s Stat) SetQid(q Qid) { pqid(s[:8], q) }
 
 // Mode contains the permissions and flags set for the file.
 // Permissions follow the unix model; the 3 least-significant
