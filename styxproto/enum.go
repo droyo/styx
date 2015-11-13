@@ -32,3 +32,5 @@ const (
 	msgTwstat                // size[4] Twstat tag[2] fid[4] stat[n]
 	msgRwstat                // size[4] Rwstat tag[2]
 )
+
+const NoTag uint16 = 0xFFFF
