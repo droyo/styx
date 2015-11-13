@@ -205,10 +205,6 @@ func (m Rerror) nbytes() int64 { return msg(m).nbytes() }
 // Ename is a UTF-8 string describing the error that occured.
 func (m Rerror) Ename() []byte { return msg(m).nthField(7, 0) }
 
-// The Error method implements the error interface, and
-// returns the result of the Ename method as a string.
-func (m Rerror) Error() string { return string(m.Ename()) }
-
 func (m Rerror) String() string { return fmt.Sprintf("Rerror ename=%q", m.Ename()) }
 
 // When the response to a request is no longer needed, such as
