@@ -446,7 +446,7 @@ type Tclunk []byte
 func (m Tclunk) Tag() uint16    { return msg(m).Tag() }
 func (m Tclunk) Len() int64     { return msg(m).Len() }
 func (m Tclunk) nbytes() int64  { return msg(m).nbytes() }
-func (m Tclunk) Fid() uint32    { return guint32(m[4:11]) }
+func (m Tclunk) Fid() uint32    { return guint32(m[7:11]) }
 func (m Tclunk) String() string { return fmt.Sprintf("Tclunk fid=%x", m.Fid()) }
 
 type Rclunk []byte
@@ -461,7 +461,7 @@ type Tremove []byte
 func (m Tremove) Tag() uint16    { return msg(m).Tag() }
 func (m Tremove) Len() int64     { return msg(m).Len() }
 func (m Tremove) nbytes() int64  { return msg(m).nbytes() }
-func (m Tremove) Fid() uint32    { return guint32(m[4:11]) }
+func (m Tremove) Fid() uint32    { return guint32(m[7:11]) }
 func (m Tremove) String() string { return fmt.Sprintf("Tremove fid=%x", m.Fid()) }
 
 type Rremove []byte
