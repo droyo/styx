@@ -74,6 +74,9 @@ func (s *Scanner) fetchMessages() error {
 	if (err == bufio.ErrBufferFull || err == errShortRead) && len(result) > 0 {
 		err = nil
 	}
+	if err == io.EOF && s.dotlen() != 0 {
+		err = io.ErrUnexpectedEOF
+	}
 	s.err = err
 	s.msg = result
 	return s.err
