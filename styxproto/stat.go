@@ -11,10 +11,6 @@ import (
 // a Stat structure for each directory entry.
 type Stat []byte
 
-// Size returns the length (in bytes) of the stat structure, minus the
-// two-byte size.
-func (s Stat) Size() uint16 { return guint16(s[0:2]) }
-
 // The 2-byte type field contains implementation-specific data
 // that is outside the scope of the 9P protocol.
 func (s Stat) Type() uint16 { return guint16(s[2:4]) }
