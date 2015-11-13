@@ -176,6 +176,10 @@ func (m Tattach) String() string {
 		m.Fid(), m.Afid(), m.Uname(), m.Aname())
 }
 
+// The Rattach message contains a server's reply to a Tattach request.
+// As a result of the attach transaction, the client will have a
+// connection to the root directory of the desired file tree, represented
+// by the returned qid.
 type Rattach []byte
 
 func (m Rattach) Tag() uint16   { return msg(m).Tag() }
@@ -187,8 +191,13 @@ func (m Rattach) nbytes() int64 { return msg(m).nbytes() }
 func (m Rattach) Qid() Qid       { return Qid(m[7:20]) }
 func (m Rattach) String() string { return fmt.Sprintf("Rattach qid=%q", m.Qid()) }
 
+// The Rerror message (there is no Terror) is used to return an
+// error string describing the failure of a transaction.
 type Rerror []byte
 
+// An Rerror message replaces the corresponding reply message that
+// would accom- pany a successful call; its tag is that of the failing
+// request.
 func (m Rerror) Tag() uint16   { return msg(m).Tag() }
 func (m Rerror) Len() int64    { return msg(m).Len() }
 func (m Rerror) nbytes() int64 { return msg(m).nbytes() }
@@ -202,6 +211,9 @@ func (m Rerror) Error() string { return string(m.Ename()) }
 
 func (m Rerror) String() string { return fmt.Sprintf("Rerror ename=%q", m.Ename()) }
 
+// When the response to a request is no longer needed, such as
+// when a user interrupts a process doing a read(2), a Tflush
+// request is sent to the server to purge the pending response.
 type Tflush []byte
 
 func (m Tflush) Tag() uint16    { return msg(m).Tag() }
@@ -210,6 +222,12 @@ func (m Tflush) nbytes() int64  { return msg(m).nbytes() }
 func (m Tflush) Oldtag() uint16 { return guint16(m[7:9]) }
 func (m Tflush) String() string { return fmt.Sprintf("Tflush oldtag=%x", m.Oldtag()) }
 
+// A server should answer a Tflush message immediately with
+// an Rflush message that echoes the tag (not oldtag) of the
+// Tflush message. If it recognizes oldtag as the tag of a pending
+// transaction, it should abort any pending response and discard
+// that tag. A Tflush can never be responded to with an Rerror
+// message.
 type Rflush []byte
 
 func (m Rflush) Tag() uint16    { return msg(m).Tag() }
@@ -217,14 +235,32 @@ func (m Rflush) Len() int64     { return msg(m).Len() }
 func (m Rflush) nbytes() int64  { return msg(m).nbytes() }
 func (m Rflush) String() string { return "Rflush" }
 
+// A Twalk message is used to descend a directory hierarchy.
 type Twalk []byte
 
-func (m Twalk) Tag() uint16        { return msg(m).Tag() }
-func (m Twalk) Len() int64         { return msg(m).Len() }
-func (m Twalk) nbytes() int64      { return msg(m).nbytes() }
-func (m Twalk) Fid() uint32        { return guint32(m[7:11]) }
-func (m Twalk) Newfid() uint32     { return guint32(m[11:15]) }
-func (m Twalk) Nwname() int        { return int(guint16(m[15:17])) }
+func (m Twalk) Tag() uint16   { return msg(m).Tag() }
+func (m Twalk) Len() int64    { return msg(m).Len() }
+func (m Twalk) nbytes() int64 { return msg(m).nbytes() }
+
+// The Twalk message contains the fid of the directory it intends
+// to descend into. The Fid must have been established by a previous
+// transaction, such as an attach.
+func (m Twalk) Fid() uint32 { return guint32(m[7:11]) }
+
+// Newfid contains the proposed fid that the client wishes to associate
+// with the result of traversing the directory hierarchy.
+func (m Twalk) Newfid() uint32 { return guint32(m[11:15]) }
+
+// To simplify the implementation of servers, a maximum of sixteen
+// name elements may be packed in a single message, as captured
+// by the constant MaxWElem.
+//
+// It is legal for Nwname to be zero, in which case Newfid will
+// represent the same file as Fid.
+func (m Twalk) Nwname() int { return int(guint16(m[15:17])) }
+
+// The Twalk message contains an ordered list of path name elements
+// that the client wishes to descend into in succession.
 func (m Twalk) Wname(n int) []byte { return msg(m).nthField(17, n) }
 func (m Twalk) String() string {
 	var buf [MaxWElem][]byte
@@ -237,6 +273,9 @@ func (m Twalk) String() string {
 	return fmt.Sprintf("Twalk fid=%x newfid=%x %q", m.Fid(), m.Newfid(), path)
 }
 
+// An Rwalk message contains a server's reply to a successful
+// Twalk request. If the first path in the corresponding Twalk request
+// cannot be walked, an Rerror message is returned instead.
 type Rwalk []byte
 
 func (m Rwalk) Tag() uint16   { return msg(m).Tag() }
@@ -263,17 +302,39 @@ func (m Rwalk) String() string {
 	return fmt.Sprintf("Rwalk wqid=%q", strings.Join(wqid, ","))
 }
 
+// The open request asks the file server to check permissions
+// and prepare a fid for I/O with subsequent read and write
+// messages.
 type Topen []byte
 
 func (m Topen) Tag() uint16   { return msg(m).Tag() }
 func (m Topen) Len() int64    { return msg(m).Len() }
 func (m Topen) nbytes() int64 { return msg(m).nbytes() }
-func (m Topen) Fid() uint32   { return guint32(m[7:11]) }
-func (m Topen) Mode() uint8   { return uint8(m[11]) }
+
+// Fid is the fid of the file to open, as established by a previous
+// transaction (such as a succesful Twalk).
+func (m Topen) Fid() uint32 { return guint32(m[7:11]) }
+
+// The mode field determines the type of I/O: 0 (OREAD), 1 (OWRITE),
+// 2 (ORDWR), and 3 (OEXEC) mean read access, write access, read and
+// write access, and execute access, to be checked against the per-
+// missions for the file. In addition, if mode has the OTRUNC (0x10)
+// bit set, the file is to be truncated, which requires write permission
+// (if the file is append-only, and permission is granted, the open
+// succeeds but the file will not be trun- cated); if the mode has the
+// ORCLOSE (0x40) bit set, the file is to be removed when the fid is
+// clunked, which requires permission to remove the file from its
+// directory.  All other bits in mode should be zero.  It is illegal
+// to write a directory, truncate it, or attempt to remove it on close.
+func (m Topen) Mode() uint8 { return uint8(m[11]) }
 func (m Topen) String() string {
 	return fmt.Sprintf("Topen fid=%x mode=%#o", m.Fid(), m.Mode())
 }
 
+// An Ropen message contains a servers response to a Topen
+// request. An Ropen message is only sent if the server determined
+// that the requesting user had the proper permissions required
+// for the Topen to succeed, otherwise Rerror is returned.
 type Ropen []byte
 
 func (m Ropen) Tag() uint16   { return msg(m).Tag() }
@@ -378,6 +439,10 @@ func (m Rwrite) nbytes() int64  { return msg(m).nbytes() }
 func (m Rwrite) Count() uint32  { return guint32(m[7:11]) }
 func (m Rwrite) String() string { return fmt.Sprintf("Rwrite count=%d", m.Count()) }
 
+// The clunk request informs the file server that the current
+// file represented by fid is no longer needed by the client.
+// The actual file is not removed on the server unless the fid
+// had been opened with ORCLOSE.
 type Tclunk []byte
 
 func (m Tclunk) Tag() uint16    { return msg(m).Tag() }

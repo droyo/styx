@@ -69,6 +69,11 @@ type Scanner struct {
 // a message, Err will return io.ErrUnexpectedEOF. Otherwise,
 // io.EOF is not considered to be an error, and is not relayed
 // by Err.
+//
+// Invalid messages are not considered errors, and are
+// represented in the Messages slice as values of type BadMessage.
+// Only problems with the underlying I/O device are
+// considered errors.
 func (s *Scanner) Err() error {
 	if s.err == io.EOF {
 		return nil
@@ -91,7 +96,12 @@ func (s *Scanner) Messages() []Msg {
 // the first error encountered.
 //
 // If Next returns true, at least one 9P message will be returned from
-// the next call to the Messages method of the Scanner.
+// the next call to the Messages method of the Scanner. If multiple
+// messages can be retrieved with a single call to Read, they will be
+// validated at once and available via the Messages method. If the
+// Scanner encounters a Tversion or Rversion message, parsing will
+// stop even if additional messages are pending, so that new messages
+// can be parsed based on the protocol version and maximum size.
 func (s *Scanner) Next() bool {
 	s.exhaustReaders()
 	s.dropMessages()
@@ -182,7 +192,7 @@ func (s *Scanner) fill(n int) error {
 }
 
 // Discard only takes an int, so it takes multiple function calls to drop the maximum
-// message the 9P protocol allows (on platforms with 4-byte ints)
+// message the 9P protocol allows (MaxUint32)
 func discard(r *bufio.Reader, n int64) error {
 	for i := n; i > 0; i -= int64(maxInt) {
 		chunk := maxInt
