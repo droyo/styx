@@ -389,7 +389,7 @@ func (m Tread) Fid() uint32   { return guint32(m[7:11]) }
 func (m Tread) Offset() int64 { return int64(guint64(m[11:19])) }
 func (m Tread) Count() int64  { return int64(guint32(m[19:23])) }
 func (m Tread) String() string {
-	return fmt.Sprintf("Tread offset=%d count=%d", m.Offset(), m.Count())
+	return fmt.Sprintf("Tread fid=%d offset=%d count=%d", m.Fid(), m.Offset(), m.Count())
 }
 
 // The Rread message returns the bytes requested by a Tread message.
