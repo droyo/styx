@@ -212,9 +212,11 @@ func (m Rerror) String() string { return fmt.Sprintf("Rerror ename=%q", m.Ename(
 // request is sent to the server to purge the pending response.
 type Tflush []byte
 
-func (m Tflush) Tag() uint16    { return msg(m).Tag() }
-func (m Tflush) Len() int64     { return msg(m).Len() }
-func (m Tflush) nbytes() int64  { return msg(m).nbytes() }
+func (m Tflush) Tag() uint16   { return msg(m).Tag() }
+func (m Tflush) Len() int64    { return msg(m).Len() }
+func (m Tflush) nbytes() int64 { return msg(m).nbytes() }
+
+// The message being flushed is identified by oldtag.
 func (m Tflush) Oldtag() uint16 { return guint16(m[7:9]) }
 func (m Tflush) String() string { return fmt.Sprintf("Tflush oldtag=%x", m.Oldtag()) }
 
