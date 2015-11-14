@@ -65,12 +65,10 @@ func pstring(b []byte, s ...string) []byte {
 	return b
 }
 
-func pheader(buf []byte, mtype uint8, tag uint16, more ...uint32) []byte {
+func pheader(buf []byte, mtype uint8, tag uint16, extra ...uint32) []byte {
 	b := puint8(buf[:4], mtype)
 	b = puint16(b, tag)
-	for _, v := range more {
-		b = puint32(b, v)
-	}
+	b = puint32(b, extra...)
 	return b
 }
 
