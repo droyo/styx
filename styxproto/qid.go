@@ -1,7 +1,6 @@
 package styxproto
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 )
@@ -29,16 +28,16 @@ func (q Qid) Type() QidType { return QidType(q[0]) }
 
 // Version is a version number for a file; typically, it is incremented
 // every time a file is modified.
-func (q Qid) Version() uint32 { return binary.LittleEndian.Uint32(q[1:5]) }
+func (q Qid) Version() uint32 { return guint32(q[1:5]) }
 
 // Path is an integer unique among all files in the hierarchy. If a
 // file is deleted and recreated with the same name in the same
 // directory, the old and new path components of the qids should be
 // different.
-func (q Qid) Path() uint64 { return binary.LittleEndian.Uint64(q[5:13]) }
+func (q Qid) Path() uint64 { return guint64(q[5:13]) }
 
 func (q Qid) String() string {
-	return fmt.Sprintf("type=%d ver=%d path=%d", q.Type(), q.Version(), q.Path())
+	return fmt.Sprintf("type=%d ver=%d path=%x", q.Type(), q.Version(), q.Path())
 }
 
 // A QidType represents the type of a file (directory, etc.), represented
