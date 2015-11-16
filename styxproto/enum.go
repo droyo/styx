@@ -33,7 +33,13 @@ const (
 	msgRwstat                // size[4] Rwstat tag[2]
 )
 
-const NoTag uint16 = 0xFFFF
+// NoTag is the tag for Tversion and Rversion requests.
+const NoTag = ^uint16(0)
+
+// NoFid is a reserved fid used in a Tattach request for the
+// afid field, that indicates that the client does not wish
+// to authenticate his session.
+const NoFid = ^uint32(0)
 
 // Flags for the mode field in Topen and Tcreate messages
 const (

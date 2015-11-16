@@ -7,7 +7,8 @@ import (
 
 // The Stat structure describes a directory entry. It is contained in
 // Rstat and Twstat messages. Tread requests on directories return
-// a Stat structure for each directory entry.
+// a Stat structure for each directory entry. A Stat implements the
+// os.FileInfo interface.
 type Stat []byte
 
 // The 2-byte type field contains implementation-specific data
@@ -65,7 +66,12 @@ func (s Stat) String() string {
 		s.Length(), s.Name(), s.Uid(), s.Gid(), s.Muid())
 }
 
-// NewStat creates a new Stat structure.
+// NewStat creates a new Stat structure. The name, uid, gid, and muid
+// fields affect the size of the stat-structure and should be considered
+// read-only once the Stat is created. An error is returned if name is
+// more than MaxFilenameLen bytes long or uid, gid, or muid are more
+// than MaxUidLen bytes long. Additional fields in the Stat structure
+// can be set by using the appropriate Set method on the Stat value.
 func NewStat(buf []byte, name, uid, gid, muid string) (Stat, []byte, error) {
 	if len(uid) > MaxUidLen || len(gid) > MaxUidLen || len(muid) > MaxUidLen {
 		return nil, buf, errLongUsername

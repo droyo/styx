@@ -10,7 +10,10 @@ import (
 // if and only if their qids are the same.
 type Qid []byte
 
-// NewQid creates a new Qid
+// NewQid writes the 9P representation of a Qid to buf. If buf is
+// not long enough to hold a Qid (13 bytes), io.ErrShortBuffer is
+// returned. NewQid returns any remaining space in buf after
+// the Qid has been written.
 func NewQid(buf []byte, qtype uint8, version uint32, path uint64) (Qid, []byte, error) {
 	if len(buf) < 13 {
 		return nil, buf, io.ErrShortBuffer
@@ -27,7 +30,9 @@ func NewQid(buf []byte, qtype uint8, version uint32, path uint64) (Qid, []byte, 
 func (q Qid) Type() QidType { return QidType(q[0]) }
 
 // Version is a version number for a file; typically, it is incremented
-// every time a file is modified.
+// every time a file is modified. By convention, synthetic files usually
+// have a verison number of 0. Traditional files have a version number
+// that is a hash of their modification time.
 func (q Qid) Version() uint32 { return guint32(q[1:5]) }
 
 // Path is an integer unique among all files in the hierarchy. If a
