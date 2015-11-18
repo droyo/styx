@@ -191,19 +191,9 @@ func (s *Scanner) fill(n int) error {
 	return err
 }
 
-// Discard only takes an int, so it takes multiple function calls to drop the maximum
-// message the 9P protocol allows (MaxUint32)
 func discard(r *bufio.Reader, n int64) error {
-	for i := n; i > 0; i -= int64(maxInt) {
-		chunk := maxInt
-		if i < int64(chunk) {
-			chunk = int(i)
-		}
-		if _, err := r.Discard(chunk); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := io.CopyN(ioutil.Discard, r, n)
+	return err
 }
 
 // free up buffer space for the next parsing cycle
