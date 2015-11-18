@@ -37,6 +37,13 @@ func TestMinSize(t *testing.T) {
 	}
 }
 
+func TestDefaultBufSize(t *testing.T) {
+	if DefaultBufSize < MinBufSize {
+		t.Errorf("DefaultBufSize (%d) less than MinBufSize(%d)",
+			DefaultBufSize, MinBufSize)
+	}
+}
+
 func TestMinBufSize(t *testing.T) {
 	if MinBufSize > (1<<31 - 1) {
 		t.Error("Max allowed \"fixed\" message size is greater than the maximum value " +
