@@ -1,6 +1,15 @@
 package styxproto
 
-import "testing"
+import (
+	"bytes"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func bytesFrom(v interface{}) []byte {
+	return reflect.ValueOf(v).Bytes()
+}
 
 func TestEncode(t *testing.T) {
 	var (
@@ -8,11 +17,33 @@ func TestEncode(t *testing.T) {
 		buf     = make([]byte, MinBufSize)
 		statbuf = make([]byte, maxStatLen)
 	)
+	var wbuf bytes.Buffer
 	encode := func(v interface{}, _ []byte, err error) interface{} {
+		wbuf.Reset()
 		if err != nil {
-			t.Fatalf("- %T %s", v, err)
+			t.Fatalf("× %T %s", v, err)
 		} else {
-			t.Logf("+ %s", v)
+			t.Logf("← %s", v)
+		}
+		// Ensure anything we produce is valid
+		var p Msg
+		switch v := v.(type) {
+		case Rread:
+			p, err = parseMsg(v.msg.Type(), v.msg, v.Reader)
+		case Twrite:
+			p, err = parseMsg(v.msg.Type(), v.msg, v.Reader)
+		case Stat:
+			// skip
+		case Qid:
+			// skip
+		default:
+			b := bytesFrom(v)
+			p, err = parseMsg(msg(b).Type(), b, nil)
+		}
+		if err != nil {
+			t.Errorf("× %T: %s", v, err)
+		} else if p != nil {
+			t.Logf("→ %s", p)
 		}
 		return v
 	}
@@ -39,8 +70,8 @@ func TestEncode(t *testing.T) {
 	encode(NewTcreate(buf, 1, 4, "frogs.txt", 0755, 3))
 	encode(NewRcreate(buf, 1, qid, 1200))
 	encode(NewTread(buf, 0, 32, 803280, 5308))
-	encode(NewRread(buf, 0, 0, nil))
-	encode(NewTwrite(buf, 1, 4, 10, 0, nil))
+	encode(NewRread(buf, 0, 3, strings.NewReader("hello, world!")))
+	encode(NewTwrite(buf, 1, 4, 10, 0, strings.NewReader("goodbye, world!")))
 	encode(NewRwrite(buf, 1, 0))
 	encode(NewTclunk(buf, 5, 4))
 	encode(NewRclunk(buf, 5))
