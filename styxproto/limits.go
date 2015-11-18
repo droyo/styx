@@ -103,7 +103,7 @@ const MaxAttachLen = 255
 const MinBufSize = MaxWElem*(MaxFilenameLen+2) + 13 + 4
 
 // DefaultBufSize is the default buffer size used in a Parser
-const DefaultBufSize = 1 << 20
+const DefaultBufSize = 8192
 
 // See stat(5) for layout of a stat structure
 const minStatLen = 49
