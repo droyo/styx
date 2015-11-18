@@ -81,7 +81,7 @@ const MaxFileLen = 1<<63 - 1
 const MaxOffset = 1<<63 - 1
 
 // MaxFilenameLen is the maximum length of a file name in bytes
-const MaxFilenameLen = 512
+const MaxFilenameLen = 255
 
 // MaxWElem is the maximum allowed number of path elements in a Twalk
 // request
