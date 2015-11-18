@@ -4,3 +4,4 @@ notifications:
     recipients: droyo@aqwari.net
     on_success: change
     on_failure: always
+install: mkdir -p $HOME/gopath/src/aqwari.net/net && ln -s $HOME/gopath/src/github.com/droyo/styx $HOME/gopath/src/aqwari.net/net/styx && go get -v -t ./...
