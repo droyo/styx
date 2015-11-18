@@ -1,0 +1,6 @@
+language: go
+notifications:
+  email:
+    recipients: droyo@aqwari.net
+    on_success: change
+    on_failure: always
