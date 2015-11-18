@@ -138,7 +138,7 @@ func (s *Scanner) readFixed(result []Msg) ([]Msg, error) {
 		return result, err
 	}
 
-	parsed, err := msgParseLUT[msgType](msg, nil)
+	parsed, err := parseMsg(msgType, msg, nil)
 
 	// Nothing left to read, all that's possible are parsing errors
 	if err != nil {
@@ -165,13 +165,17 @@ func (s *Scanner) readRW(result []Msg) ([]Msg, error) {
 		panic("read of buffered data failed: " + err.Error())
 	}
 
-	parsed, err := msgParseLUT[msgType](msg, s.r)
+	parsed, err := parseMsg(msgType, msg, s.r)
 	if err != nil {
 		return s.badMessage(result, msg, err)
 	}
 
 	s.mark()
 	return append(result, parsed), nil
+}
+
+func parseMsg(t uint8, m msg, r io.Reader) (Msg, error) {
+	return msgParseLUT[t](m, r)
 }
 
 func (s *Scanner) badMessage(result []Msg, bad msg, reason error) ([]Msg, error) {
