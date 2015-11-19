@@ -230,13 +230,13 @@ func parseTauth(dot msg, _ io.Reader) (Msg, error) {
 }
 
 func parseTauthBody(body []byte) error {
-	if uname, _, err := verifyField(body[4:], false, 2); err != nil {
+	if uname, rest, err := verifyField(body[4:], false, 2); err != nil {
 		return err
 	} else if err := verifyString(uname); err != nil {
 		return err
 	} else if len(uname) > MaxUidLen {
 		return errLongUsername
-	} else if aname, _, err := verifyField(uname, true, 0); err != nil {
+	} else if aname, _, err := verifyField(rest, true, 0); err != nil {
 		return err
 	} else if err := verifyString(aname); err != nil {
 		return err
