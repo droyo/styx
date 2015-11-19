@@ -24,4 +24,5 @@ var (
 	errTooBig         = parseError("message is too long")
 	errTooSmall       = parseError("message is too small")
 	errUnderSize      = parseError("empty space in message")
+	errZeroLen        = parseError("zero-length message")
 )

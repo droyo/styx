@@ -66,9 +66,13 @@ func (s *Decoder) fetchMessages() error {
 	result := s.msg[:0]
 
 	for {
+		oldstart := s.start
 		result, err = s.fetchOne(result)
 		if err != nil {
 			break
+		}
+		if oldstart == s.start {
+			panic("decoder did not advance but did not return an error")
 		}
 	}
 	if (err == bufio.ErrBufferFull || err == errShortRead) && len(result) > 0 {
@@ -191,7 +195,10 @@ func (s *Decoder) badMessage(result []Msg, bad msg, reason error) ([]Msg, error)
 		tag:    bad.Tag(),
 		length: length,
 	})
-	if int64(s.buflen()+s.dotlen()) <= length {
+	if length == 0 {
+		return result, errZeroLen
+	}
+	if int64(s.buflen()+s.dotlen()) < length {
 		return result, errShortRead
 	}
 	// We can still continue parsing. This prevents one bad client
