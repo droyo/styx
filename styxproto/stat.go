@@ -112,13 +112,17 @@ func verifyStat(data []byte) error {
 	}
 
 	for i := 0; i < 3; i++ {
-		field, rest, err = verifyField(rest, i == 2, 4-i*2)
+		padding := 4 - i*2
+		field, rest, err = verifyField(rest, i == 2, padding)
 		if err != nil {
 			return err
 		} else if err := verifyString(field); err != nil {
 			return err
 		} else if len(field) > MaxUidLen {
 			return errLongUsername
+		}
+		if len(rest) < padding {
+			return errOverSize
 		}
 	}
 	return nil

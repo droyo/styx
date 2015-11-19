@@ -307,9 +307,10 @@ func parseTwalk(dot msg, _ io.Reader) (Msg, error) {
 		return nil, errOverSize
 	}
 	elems = dot.Body()[10:]
-	for i := uint16(0); i < nwelem; i++ {
-		last := (i == nwelem-1)
-		el, elems, err = verifyField(elems, last, (int(nwelem)*2)-(int(i)*2))
+	for i := uint16(1); i <= nwelem; i++ {
+		last := i == nwelem
+		padding := (int(nwelem) * 2) - (int(i) * 2)
+		el, elems, err = verifyField(elems, last, padding)
 		if err != nil {
 			return nil, err
 		} else if err := verifyString(el); err != nil {

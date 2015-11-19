@@ -12,7 +12,7 @@ func validType(t uint8) bool {
 // it needs to be, given what we know about its
 // type.
 func verifySize(m msg) error {
-	t, n := m.Type(), m.Len()+4
+	t, n := m.Type(), m.Len()
 	if !validType(t) {
 		return errInvalidMsgType
 	}
@@ -36,18 +36,19 @@ func verifyString(data []byte) error {
 	return nil
 }
 
-// Verify the first variable-length field. If succesful, returns
-// a nil error and the remaining data after the field.
-// If fill is true, the field is expected to fill data, minus padding.
+// Verify the first variable-length field. If succesful, returns a nil
+// error and the remaining data after the field.  If fill is true, the
+// field (including 2-byte size) is expected to fill data, minus
+// padding.
 func verifyField(data []byte, fill bool, padding int) ([]byte, []byte, error) {
 	size := int(guint16(data[:2]))
-	data = data[2:]
-	if len(data) < size {
+	if size+2 > len(data)-padding {
 		return nil, nil, errOverSize
-	} else if fill && size < len(data)-padding {
+	} else if fill && size+2 < len(data)-padding {
 		// Some clients/servers leave empty space at the end
 		// of their messages, and the docs are silent on the matter.
 		//return nil, nil, errUnderSize
 	}
-	return data[:size], data[size:], nil
+	field := data[2:]
+	return field[:size], field[size:], nil
 }
