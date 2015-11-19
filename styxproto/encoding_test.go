@@ -1,7 +1,6 @@
 package styxproto
 
 import (
-	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,9 +16,7 @@ func TestEncode(t *testing.T) {
 		buf     = make([]byte, MinBufSize)
 		statbuf = make([]byte, maxStatLen)
 	)
-	var wbuf bytes.Buffer
 	encode := func(v interface{}, _ []byte, err error) interface{} {
-		wbuf.Reset()
 		if err != nil {
 			t.Fatalf("× %T %s", v, err)
 		} else {
