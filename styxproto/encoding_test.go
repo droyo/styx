@@ -60,7 +60,7 @@ func TestEncode(t *testing.T) {
 	encode(NewRerror(buf, 0, "some error"))
 	encode(NewTflush(buf, 3, 2))
 	encode(NewRflush(buf, 3))
-	encode(NewTwalk(buf, 4, 4, 4, "var", "log", "messages"))
+	encode(NewTwalk(buf, 4, 4, 10, "var", "log", "messages"))
 	encode(NewRwalk(buf, 4, qid))
 	encode(NewTopen(buf, 0, 1, 1))
 	encode(NewRopen(buf, 0, qid, 300))

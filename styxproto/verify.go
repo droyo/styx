@@ -41,6 +41,7 @@ func verifyString(data []byte) error {
 // If fill is true, the field is expected to fill data, minus padding.
 func verifyField(data []byte, fill bool, padding int) ([]byte, []byte, error) {
 	size := int(guint16(data[:2]))
+	data = data[2:]
 	if len(data) < size {
 		return nil, nil, errOverSize
 	} else if fill && size < len(data)-padding {
