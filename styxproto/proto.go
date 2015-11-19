@@ -192,7 +192,7 @@ func NewTauth(buf []byte, tag uint16, afid uint32, uname, aname string) (Tauth, 
 }
 
 func (m Tauth) String() string {
-	return fmt.Sprintf("Tauth afid=%x uname=%q aname=%q", m.Afid(), m.Uname(), m.Aname())
+	return fmt.Sprintf("Tauth afid=%d uname=%q aname=%q", m.Afid(), m.Uname(), m.Aname())
 }
 
 // Servers that require authentication will reply to Tauth requests
@@ -269,7 +269,7 @@ func NewTattach(buf []byte, tag uint16, fid, afid uint32, uname, aname string) (
 }
 
 func (m Tattach) String() string {
-	return fmt.Sprintf("Tattach fid=%x afid=%x uname=%q aname=%q",
+	return fmt.Sprintf("Tattach fid=%d afid=%d uname=%q aname=%q",
 		m.Fid(), m.Afid(), m.Uname(), m.Aname())
 }
 
@@ -454,7 +454,7 @@ func (m Twalk) String() string {
 		wname = append(wname, m.Wname(i))
 	}
 	path := bytes.Join(wname, []byte("/"))
-	return fmt.Sprintf("Twalk fid=%x newfid=%x %q", m.Fid(), m.Newfid(), path)
+	return fmt.Sprintf("Twalk fid=%d newfid=%d %q", m.Fid(), m.Newfid(), path)
 }
 
 // An Rwalk message contains a server's reply to a successful
@@ -554,7 +554,7 @@ func NewTopen(buf []byte, tag uint16, fid uint32, mode uint8) (Topen, []byte, er
 }
 
 func (m Topen) String() string {
-	return fmt.Sprintf("Topen fid=%x mode=%#o", m.Fid(), m.Mode())
+	return fmt.Sprintf("Topen fid=%d mode=%#o", m.Fid(), m.Mode())
 }
 
 // An Ropen message contains a servers response to a Topen
@@ -627,7 +627,7 @@ func NewTcreate(buf []byte, tag uint16, fid uint32, name string, perm uint32, mo
 }
 
 func (m Tcreate) String() string {
-	return fmt.Sprintf("Tcreate fid=%x name=%q perm=%o mode=%#o",
+	return fmt.Sprintf("Tcreate fid=%d name=%q perm=%o mode=%#o",
 		m.Fid(), m.Name(), m.Perm(), m.Mode())
 }
 
@@ -766,7 +766,7 @@ func NewTwrite(buf []byte, tag uint16, fid uint32, offset, count int64, data io.
 }
 
 func (m Twrite) String() string {
-	return fmt.Sprintf("Twrite fid=%x offset=%d count=%d",
+	return fmt.Sprintf("Twrite fid=%d offset=%d count=%d",
 		m.Fid(), m.Offset(), m.Count())
 }
 
@@ -812,7 +812,7 @@ func NewTclunk(buf []byte, tag uint16, fid uint32) (Tclunk, []byte, error) {
 
 	return Tclunk(b), buf[len(b):], nil
 }
-func (m Tclunk) String() string { return fmt.Sprintf("Tclunk fid=%x", m.Fid()) }
+func (m Tclunk) String() string { return fmt.Sprintf("Tclunk fid=%d", m.Fid()) }
 
 type Rclunk []byte
 
@@ -847,7 +847,7 @@ func NewTremove(buf []byte, tag uint16, fid uint32) (Tremove, []byte, error) {
 
 	return Tremove(b), buf[len(b):], nil
 }
-func (m Tremove) String() string { return fmt.Sprintf("Tremove fid=%x", m.Fid()) }
+func (m Tremove) String() string { return fmt.Sprintf("Tremove fid=%d", m.Fid()) }
 
 type Rremove []byte
 
@@ -882,7 +882,7 @@ func NewTstat(buf []byte, tag uint16, fid uint32) (Tstat, []byte, error) {
 
 	return Tstat(b), buf[len(b):], nil
 }
-func (m Tstat) String() string { return fmt.Sprintf("Tstat fid=%x", m.Fid()) }
+func (m Tstat) String() string { return fmt.Sprintf("Tstat fid=%d", m.Fid()) }
 
 type Rstat []byte
 
@@ -933,7 +933,7 @@ func NewTwstat(buf []byte, tag uint16, fid uint32, stat Stat) (Twstat, []byte, e
 
 	return Twstat(b), buf[len(b):], nil
 }
-func (m Twstat) String() string { return fmt.Sprintf("Twstat fid=%x stat=%q", m.Fid(), m.Stat()) }
+func (m Twstat) String() string { return fmt.Sprintf("Twstat fid=%d stat=%q", m.Fid(), m.Stat()) }
 
 type Rwstat []byte
 
