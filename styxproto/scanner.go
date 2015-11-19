@@ -158,6 +158,13 @@ func (s *Decoder) advance(n int) {
 	s.pos += n
 }
 
+func (s *Decoder) shrinkdot(n int) {
+	if s.dotlen() < n {
+		panic("shrink dot out of bounds")
+	}
+	s.pos -= n
+}
+
 // advance start of dot to end of dot
 func (s *Decoder) mark() {
 	s.start = s.pos

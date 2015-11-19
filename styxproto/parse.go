@@ -203,8 +203,10 @@ func (s *Decoder) badMessage(result []Msg, bad msg, reason error) ([]Msg, error)
 	}
 	// We can still continue parsing. This prevents one bad client
 	// from hurting performance for others on the same connection.
-	if _, err := s.growdot(int(length)); err != nil {
-		panic("read buffered data failed: " + err.Error())
+	if s.dotlen() > int(length) {
+		s.shrinkdot(s.dotlen() - int(length))
+	} else if _, err := s.growdot(int(length)); err != nil {
+		panic(err)
 	}
 	s.mark()
 	return result, nil
