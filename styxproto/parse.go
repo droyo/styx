@@ -51,7 +51,7 @@ var msgParseLUT = [...]func(msg, io.Reader) (Msg, error){
 
 // read just enough data to figure out the type of message and if
 // it's the right size.
-func (s *Scanner) nextHeader() (msg, error) {
+func (s *Decoder) nextHeader() (msg, error) {
 	return s.growdot(minMsgSize)
 }
 
@@ -61,7 +61,7 @@ func (s *Scanner) nextHeader() (msg, error) {
 // every invalid message, a BadMessage is added to s.msg. fetchMessages
 // will only call Read if there is not enough data buffered to parse at least
 // one message.
-func (s *Scanner) fetchMessages() error {
+func (s *Decoder) fetchMessages() error {
 	var err error
 	result := s.msg[:0]
 
@@ -88,7 +88,7 @@ func (s *Scanner) fetchMessages() error {
 // will not perform additional I/O unless this is the first message being
 // parsed (len(result) == 0). fetchOne will return the offset of the
 // next message.
-func (s *Scanner) fetchOne(result []Msg) ([]Msg, error) {
+func (s *Decoder) fetchOne(result []Msg) ([]Msg, error) {
 	// fetchMessages guarantees it will return at least one message.
 	first := (len(result) == 0)
 
@@ -124,7 +124,7 @@ func (s *Scanner) fetchOne(result []Msg) ([]Msg, error) {
 
 // Every message besides Twrite and Rread have a small maximum size,
 // and are stored wholly in memory for convenience.
-func (s *Scanner) readFixed(result []Msg) ([]Msg, error) {
+func (s *Decoder) readFixed(result []Msg) ([]Msg, error) {
 	first := (len(result) == 0)
 	msg := msg(s.dot())
 	msgSize, msgType := msg.Len(), msg.Type()
@@ -149,7 +149,7 @@ func (s *Scanner) readFixed(result []Msg) ([]Msg, error) {
 	return append(result, parsed), nil
 }
 
-func (s *Scanner) readRW(result []Msg) ([]Msg, error) {
+func (s *Decoder) readRW(result []Msg) ([]Msg, error) {
 	var err error
 
 	msg := msg(s.dot())
@@ -178,7 +178,7 @@ func parseMsg(t uint8, m msg, r io.Reader) (Msg, error) {
 	return msgParseLUT[t](m, r)
 }
 
-func (s *Scanner) badMessage(result []Msg, bad msg, reason error) ([]Msg, error) {
+func (s *Decoder) badMessage(result []Msg, bad msg, reason error) ([]Msg, error) {
 	// Invalid messages are a bit tricky; we want the caller to know right
 	// away that that an invalid message was encountered (so that he may
 	// choose to sever the connection), but if the message is not fully buffered,

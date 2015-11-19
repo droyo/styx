@@ -16,35 +16,35 @@ var (
 //   - resilient to malicious input (invalid/overlarge sizes)
 //   - streaming: a 4GB (max uint32) Twrite should not take 4G of memory
 
-// NewScanner returns a Scanner with an internal buffer of size
+// NewDecoder returns a Decoder with an internal buffer of size
 // DefaultBufSize.
-func NewScanner(r io.Reader) *Scanner {
-	return NewScannerSize(r, DefaultBufSize)
+func NewDecoder(r io.Reader) *Decoder {
+	return NewDecoderSize(r, DefaultBufSize)
 }
 
-// NewScannerSize returns a Scanner with an internal buffer of size
-// max(MinBufSize, bufsize) bytes. A scanner with a larger buffer can
+// NewDecoderSize returns a Decoder with an internal buffer of size
+// max(MinBufSize, bufsize) bytes. A Decoder with a larger buffer can
 // provide more 9P messages at once, if they are available. This may
 // improve performance on connections that are heavily multiplexed,
 // where there messages from independent sessions that can be handled
 // in any order.
-func NewScannerSize(r io.Reader, bufsize int) *Scanner {
+func NewDecoderSize(r io.Reader, bufsize int) *Decoder {
 	if bufsize < MinBufSize {
 		bufsize = MinBufSize
 	}
-	return &Scanner{r: r, br: bufio.NewReaderSize(r, bufsize)}
+	return &Decoder{r: r, br: bufio.NewReaderSize(r, bufsize)}
 }
 
-// A Scanner provides an interface for reading a stream of 9P
+// A Decoder provides an interface for reading a stream of 9P
 // messages from an io.Reader. Successive calls to the Next
-// method of a Scanner will fetch and validate 9P messages
+// method of a Decoder will fetch and validate 9P messages
 // from the input stream, until EOF is encountered, or another
 // error is encountered.
 //
-// A Scanner is not safe for concurrent use. Usage of any Scanner
+// A Decoder is not safe for concurrent use. Usage of any Decoder
 // method should be delegated to a single thread of execution or
 // protected by a mutex.
-type Scanner struct {
+type Decoder struct {
 	// input source. we need to expose this so we can stitch together
 	// an io.Reader for large Twrite/Rread messages.
 	r io.Reader
@@ -74,7 +74,7 @@ type Scanner struct {
 // represented in the Messages slice as values of type BadMessage.
 // Only problems with the underlying I/O device are
 // considered errors.
-func (s *Scanner) Err() error {
+func (s *Decoder) Err() error {
 	if s.err == io.EOF {
 		return nil
 	}
@@ -83,26 +83,26 @@ func (s *Scanner) Err() error {
 
 // Messages returns the 9P messages fetched from the last
 // call to Next. The returned messages are only valid until
-// the next call to the Scanner's Next method. All Twrite
+// the next call to the Decoder's Next method. All Twrite
 // and Rread messages must be closed before the next
 // call to Next.
-func (s *Scanner) Messages() []Msg {
+func (s *Decoder) Messages() []Msg {
 	return s.msg
 }
 
-// Next fetches the next 9P messages from the Scanner's underlying
+// Next fetches the next 9P messages from the Decoder's underlying
 // io.Reader. If an error is encountered, either with the underlying
-// IO, Next will return false, and the Scanner's Err method will return
+// IO, Next will return false, and the Decoder's Err method will return
 // the first error encountered.
 //
 // If Next returns true, at least one 9P message will be returned from
-// the next call to the Messages method of the Scanner. If multiple
+// the next call to the Messages method of the Decoder. If multiple
 // messages can be retrieved with a single call to Read, they will be
 // validated at once and available via the Messages method. If the
-// Scanner encounters a Tversion or Rversion message, parsing will
+// Decoder encounters a Tversion or Rversion message, parsing will
 // stop even if additional messages are pending, so that new messages
 // can be parsed based on the protocol version and maximum size.
-func (s *Scanner) Next() bool {
+func (s *Decoder) Next() bool {
 	s.exhaustReaders()
 	s.dropMessages()
 	s.resetdot()
@@ -121,7 +121,7 @@ func (s *Scanner) Next() bool {
 // be pulling directly from the underlying Reader, and attempting
 // to parse before the message is fully read and out of the buffer
 // will not work.
-func (s *Scanner) exhaustReaders() {
+func (s *Decoder) exhaustReaders() {
 	for _, msg := range s.msg {
 		if r, ok := msg.(io.Reader); ok {
 			if _, err := io.Copy(ioutil.Discard, r); err != nil {
@@ -136,9 +136,9 @@ func (s *Scanner) exhaustReaders() {
 // it can also be used as a "sliding window" over a byte stream.
 // If the terminology below seems odd, it is inspired by the sam
 // text editor, where "dot" refers to the current text selection.
-func (s *Scanner) dot() []byte {
+func (s *Decoder) dot() []byte {
 	if s.pos > s.br.Buffered() {
-		panic("scanner position out of bounds")
+		panic("decoder position out of bounds")
 	}
 	buf, err := s.br.Peek(s.pos)
 	if err != nil {
@@ -147,34 +147,34 @@ func (s *Scanner) dot() []byte {
 	return buf[s.start:]
 }
 
-func (s *Scanner) resetdot() {
+func (s *Decoder) resetdot() {
 	s.start, s.pos = 0, 0
 }
 
-func (s *Scanner) advance(n int) {
+func (s *Decoder) advance(n int) {
 	if s.buflen() < n {
-		panic("advance scanner out of bounds")
+		panic("advance decoder out of bounds")
 	}
 	s.pos += n
 }
 
 // advance start of dot to end of dot
-func (s *Scanner) mark() {
+func (s *Decoder) mark() {
 	s.start = s.pos
 }
 
 // number of bytes buffered after dot
-func (s *Scanner) buflen() int {
+func (s *Decoder) buflen() int {
 	return s.br.Buffered() - s.pos
 }
 
-func (s *Scanner) dotlen() int {
+func (s *Decoder) dotlen() int {
 	return s.pos - s.start
 }
 
 // extends dot to be n bytes long, performing
 // IO if necessary. returns dot
-func (s *Scanner) growdot(n int) ([]byte, error) {
+func (s *Decoder) growdot(n int) ([]byte, error) {
 	if err := s.fill(n - s.dotlen()); err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func (s *Scanner) growdot(n int) ([]byte, error) {
 }
 
 // guarantees that s.buflen() >= n if error is nil
-func (s *Scanner) fill(n int) error {
+func (s *Decoder) fill(n int) error {
 	if maxInt-n < s.pos {
 		return errFillOverflow
 	}
@@ -197,7 +197,7 @@ func discard(r *bufio.Reader, n int64) error {
 }
 
 // free up buffer space for the next parsing cycle
-func (s *Scanner) dropMessages() {
+func (s *Decoder) dropMessages() {
 	for _, msg := range s.msg {
 		if err := discard(s.br, msg.nbytes()); err != nil {
 			s.err = err

@@ -62,7 +62,7 @@ func TestMinBufSize(t *testing.T) {
 }
 
 func testParseMsg(t *testing.T, r io.Reader) {
-	p := NewScanner(r)
+	p := NewDecoder(r)
 	for p.Next() {
 		for _, m := range p.Messages() {
 			if b, ok := m.(BadMessage); ok {
