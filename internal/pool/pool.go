@@ -34,6 +34,15 @@ func New(max uint32) *Pool {
 	return &Pool{max: max}
 }
 
+// BUG(droyo): To save space, the Pool implementation allocates numbers
+// in a contiguous sequence from [0, max). When a number X is Free'd,
+// but is not at the end of the sequence, the Pool implementation
+// cannot use it until all allocated numbers greater than X have also
+// been freed. While this can result in Pools becoming full prematurely
+// for certain pathological workloads, this tradeoff allows a Pool to
+// be simple, and small, and allows the Get implementation to be
+// lock-free.
+
 // A Pool maintains a pool of free identifiers.  It is safe for
 // concurrent use. The zero value of a Pool is an empty pool that will
 // provide identifiers in the range [0, DefaultPoolSize).
