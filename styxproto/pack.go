@@ -2,6 +2,7 @@ package styxproto
 
 import (
 	"encoding/binary"
+	"io"
 	"math"
 )
 
@@ -67,4 +68,20 @@ func pheader(buf []byte, mtype uint8, tag uint16, extra ...uint32) []byte {
 func writelen(b []byte) []byte {
 	puint32(b[:0], uint32(len(b)))
 	return b
+}
+
+// Send writes the 9P protocol representation of the provided message
+// to w. An error is returned if there is a problem writing to w, or,
+// in the case of Twrite and Rread messages, reading from the message's
+// io.Reader.
+func Send(w io.Writer, m Msg) error {
+	if _, err := w.Write(m.bytes()); err != nil {
+		return err
+	}
+	if r, ok := m.(io.Reader); ok {
+		if _, err := io.Copy(w, r); err != nil {
+			return err
+		}
+	}
+	return nil
 }

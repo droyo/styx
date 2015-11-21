@@ -58,6 +58,9 @@ type Msg interface {
 	// memory. For large Twrite/Rread messages, this is just the headers,
 	// and not the payload.
 	nbytes() int64
+
+	// The underlying bytes
+	bytes() []byte
 }
 
 // The version request negotiates the protocol version and message
@@ -73,6 +76,7 @@ func (m Tversion) Tag() uint16 { return msg(m).Tag() }
 // Len returns the length of a Tversion request in bytes.
 func (m Tversion) Len() int64    { return msg(m).Len() }
 func (m Tversion) nbytes() int64 { return msg(m).nbytes() }
+func (m Tversion) bytes() []byte { return m }
 
 // Msize returns the maximum length, in bytes, that the client will
 // ever generate or expect to receive in a single 9P message. This
@@ -118,6 +122,7 @@ func (m Rversion) Tag() uint16 { return msg(m).Tag() }
 // Len returns the length of the Rversion message in bytes.
 func (m Rversion) Len() int64    { return msg(m).Len() }
 func (m Rversion) nbytes() int64 { return msg(m).nbytes() }
+func (m Rversion) bytes() []byte { return m }
 
 // Msize returns the maximum size (in bytes) of any 9P message that
 // it will send or accept, and must be equal to or less than the maximum
@@ -153,6 +158,7 @@ type Tauth []byte
 func (m Tauth) Tag() uint16   { return msg(m).Tag() }
 func (m Tauth) Len() int64    { return msg(m).Len() }
 func (m Tauth) nbytes() int64 { return msg(m).nbytes() }
+func (m Tauth) bytes() []byte { return m }
 
 // The afid of a Tversion message establishes an 'authentication file';
 // after a Tauth message is accepted by the server, a client must carry
@@ -203,6 +209,7 @@ type Rauth []byte
 func (m Rauth) Tag() uint16   { return msg(m).Tag() }
 func (m Rauth) Len() int64    { return msg(m).Len() }
 func (m Rauth) nbytes() int64 { return msg(m).nbytes() }
+func (m Rauth) bytes() []byte { return m }
 
 // The aqid of an Rauth message must be of type QTAUTH.
 func (m Rauth) Aqid() Qid      { return Qid(m[7:20]) }
@@ -229,6 +236,7 @@ type Tattach []byte
 func (m Tattach) Tag() uint16   { return msg(m).Tag() }
 func (m Tattach) Len() int64    { return msg(m).Len() }
 func (m Tattach) nbytes() int64 { return msg(m).nbytes() }
+func (m Tattach) bytes() []byte { return m }
 
 // Fid establishes a fid to be used as the root of the file tree, should
 // the client's Tattach request be accepted.
@@ -282,6 +290,7 @@ type Rattach []byte
 func (m Rattach) Tag() uint16   { return msg(m).Tag() }
 func (m Rattach) Len() int64    { return msg(m).Len() }
 func (m Rattach) nbytes() int64 { return msg(m).nbytes() }
+func (m Rattach) bytes() []byte { return m }
 
 // Qid is the qid of the root of the file tree. Qid is associated
 // with the fid of the corresponding Tattach request.
@@ -311,6 +320,7 @@ type Rerror []byte
 func (m Rerror) Tag() uint16   { return msg(m).Tag() }
 func (m Rerror) Len() int64    { return msg(m).Len() }
 func (m Rerror) nbytes() int64 { return msg(m).nbytes() }
+func (m Rerror) bytes() []byte { return m }
 
 // Ename is a UTF-8 string describing the error that occured.
 func (m Rerror) Ename() []byte { return msg(m).nthField(7, 0) }
@@ -343,6 +353,7 @@ type Tflush []byte
 func (m Tflush) Tag() uint16   { return msg(m).Tag() }
 func (m Tflush) Len() int64    { return msg(m).Len() }
 func (m Tflush) nbytes() int64 { return msg(m).nbytes() }
+func (m Tflush) bytes() []byte { return m }
 
 // The message being flushed is identified by oldtag.
 func (m Tflush) Oldtag() uint16 { return guint16(m[7:9]) }
@@ -374,6 +385,7 @@ type Rflush []byte
 func (m Rflush) Tag() uint16   { return msg(m).Tag() }
 func (m Rflush) Len() int64    { return msg(m).Len() }
 func (m Rflush) nbytes() int64 { return msg(m).nbytes() }
+func (m Rflush) bytes() []byte { return m }
 
 // NewRflush writes a new Rflush message to buf. io.ErrShortBuffer is
 // returned if buf is not long enough to hold an Rflush message. Any
@@ -396,6 +408,7 @@ type Twalk []byte
 func (m Twalk) Tag() uint16   { return msg(m).Tag() }
 func (m Twalk) Len() int64    { return msg(m).Len() }
 func (m Twalk) nbytes() int64 { return msg(m).nbytes() }
+func (m Twalk) bytes() []byte { return m }
 
 // The Twalk message contains the fid of the directory it intends
 // to descend into. The Fid must have been established by a previous
@@ -465,6 +478,7 @@ type Rwalk []byte
 func (m Rwalk) Tag() uint16   { return msg(m).Tag() }
 func (m Rwalk) Len() int64    { return msg(m).Len() }
 func (m Rwalk) nbytes() int64 { return msg(m).nbytes() }
+func (m Rwalk) bytes() []byte { return m }
 
 // Nwqid must always be equal to or lesser than Nwname of the corresponding
 // Twalk request. Only if Nwqid is equal to Nwname is the Newfid of
@@ -513,6 +527,7 @@ type Topen []byte
 func (m Topen) Tag() uint16   { return msg(m).Tag() }
 func (m Topen) Len() int64    { return msg(m).Len() }
 func (m Topen) nbytes() int64 { return msg(m).nbytes() }
+func (m Topen) bytes() []byte { return m }
 
 // Fid is the fid of the file to open, as established by a previous
 // transaction (such as a succesful Twalk).
@@ -566,6 +581,7 @@ type Ropen []byte
 func (m Ropen) Tag() uint16   { return msg(m).Tag() }
 func (m Ropen) Len() int64    { return msg(m).Len() }
 func (m Ropen) nbytes() int64 { return msg(m).nbytes() }
+func (m Ropen) bytes() []byte { return m }
 
 // Qid contains the unique identifier of the opened file.
 func (m Ropen) Qid() Qid { return Qid(m[7:20]) }
@@ -600,6 +616,7 @@ type Tcreate []byte
 func (m Tcreate) Tag() uint16   { return msg(m).Tag() }
 func (m Tcreate) Len() int64    { return msg(m).Len() }
 func (m Tcreate) nbytes() int64 { return msg(m).nbytes() }
+func (m Tcreate) bytes() []byte { return m }
 func (m Tcreate) Fid() uint32   { return guint32(m[7:11]) }
 func (m Tcreate) Name() []byte  { return msg(m).nthField(11, 0) }
 func (m Tcreate) Perm() uint32 {
@@ -636,6 +653,7 @@ type Rcreate []byte
 func (m Rcreate) Tag() uint16   { return msg(m).Tag() }
 func (m Rcreate) Len() int64    { return msg(m).Len() }
 func (m Rcreate) nbytes() int64 { return msg(m).nbytes() }
+func (m Rcreate) bytes() []byte { return m }
 func (m Rcreate) Qid() Qid      { return Qid(m[7:20]) }
 func (m Rcreate) IOunit() int64 { return int64(guint32(m[20:24])) }
 
@@ -660,6 +678,7 @@ type Tread []byte
 func (m Tread) Tag() uint16   { return msg(m).Tag() }
 func (m Tread) Len() int64    { return msg(m).Len() }
 func (m Tread) nbytes() int64 { return msg(m).nbytes() }
+func (m Tread) bytes() []byte { return m }
 
 // Fid is the handle of the file to read from.
 func (m Tread) Fid() uint32 { return guint32(m[7:11]) }
@@ -708,6 +727,7 @@ type Rread struct {
 func (m Rread) Tag() uint16   { return m.msg.Tag() }
 func (m Rread) Len() int64    { return m.msg.Len() }
 func (m Rread) nbytes() int64 { return m.msg.nbytes() }
+func (m Rread) bytes() []byte { return m.msg[:11] }
 func (m Rread) Count() int64  { return int64(guint32(m.msg[7:11])) }
 
 // NewRread writes a new Rread message to buf.  An error is returned if
@@ -743,6 +763,7 @@ type Twrite struct {
 func (m Twrite) Tag() uint16   { return m.msg.Tag() }
 func (m Twrite) Len() int64    { return m.msg.Len() }
 func (m Twrite) nbytes() int64 { return m.msg.nbytes() }
+func (m Twrite) bytes() []byte { return m.msg[:23] }
 func (m Twrite) Fid() uint32   { return Tread(m.msg).Fid() }
 func (m Twrite) Offset() int64 { return Tread(m.msg).Offset() }
 func (m Twrite) Count() int64  { return Tread(m.msg).Count() }
@@ -775,6 +796,7 @@ type Rwrite []byte
 func (m Rwrite) Tag() uint16   { return msg(m).Tag() }
 func (m Rwrite) Len() int64    { return msg(m).Len() }
 func (m Rwrite) nbytes() int64 { return msg(m).nbytes() }
+func (m Rwrite) bytes() []byte { return m }
 func (m Rwrite) Count() uint32 { return guint32(m[7:11]) }
 
 func NewRwrite(buf []byte, tag uint16, count int64) (Rwrite, []byte, error) {
@@ -801,6 +823,7 @@ type Tclunk []byte
 func (m Tclunk) Tag() uint16   { return msg(m).Tag() }
 func (m Tclunk) Len() int64    { return msg(m).Len() }
 func (m Tclunk) nbytes() int64 { return msg(m).nbytes() }
+func (m Tclunk) bytes() []byte { return m }
 func (m Tclunk) Fid() uint32   { return guint32(m[7:11]) }
 
 func NewTclunk(buf []byte, tag uint16, fid uint32) (Tclunk, []byte, error) {
@@ -819,6 +842,7 @@ type Rclunk []byte
 func (m Rclunk) Tag() uint16   { return msg(m).Tag() }
 func (m Rclunk) Len() int64    { return msg(m).Len() }
 func (m Rclunk) nbytes() int64 { return msg(m).nbytes() }
+func (m Rclunk) bytes() []byte { return m }
 
 func NewRclunk(buf []byte, tag uint16) (Rclunk, []byte, error) {
 	if len(buf) < maxSizeLUT[msgRclunk] {
@@ -836,6 +860,7 @@ type Tremove []byte
 func (m Tremove) Tag() uint16   { return msg(m).Tag() }
 func (m Tremove) Len() int64    { return msg(m).Len() }
 func (m Tremove) nbytes() int64 { return msg(m).nbytes() }
+func (m Tremove) bytes() []byte { return m }
 func (m Tremove) Fid() uint32   { return guint32(m[7:11]) }
 
 func NewTremove(buf []byte, tag uint16, fid uint32) (Tremove, []byte, error) {
@@ -854,6 +879,7 @@ type Rremove []byte
 func (m Rremove) Tag() uint16   { return msg(m).Tag() }
 func (m Rremove) Len() int64    { return msg(m).Len() }
 func (m Rremove) nbytes() int64 { return msg(m).nbytes() }
+func (m Rremove) bytes() []byte { return m }
 
 func NewRremove(buf []byte, tag uint16) (Rremove, []byte, error) {
 	if len(buf) < maxSizeLUT[msgRremove] {
@@ -871,6 +897,7 @@ type Tstat []byte
 func (m Tstat) Tag() uint16   { return msg(m).Tag() }
 func (m Tstat) Len() int64    { return msg(m).Len() }
 func (m Tstat) nbytes() int64 { return msg(m).nbytes() }
+func (m Tstat) bytes() []byte { return m }
 func (m Tstat) Fid() uint32   { return guint32(m[7:11]) }
 
 func NewTstat(buf []byte, tag uint16, fid uint32) (Tstat, []byte, error) {
@@ -889,6 +916,7 @@ type Rstat []byte
 func (m Rstat) Tag() uint16   { return msg(m).Tag() }
 func (m Rstat) Len() int64    { return msg(m).Len() }
 func (m Rstat) nbytes() int64 { return msg(m).nbytes() }
+func (m Rstat) bytes() []byte { return m }
 func (m Rstat) Stat() Stat    { return msg(m).nthField(7, 0) }
 
 func NewRstat(buf []byte, tag uint16, stat Stat) (Rstat, []byte, error) {
@@ -914,6 +942,7 @@ type Twstat []byte
 func (m Twstat) Tag() uint16   { return msg(m).Tag() }
 func (m Twstat) Len() int64    { return msg(m).Len() }
 func (m Twstat) nbytes() int64 { return msg(m).nbytes() }
+func (m Twstat) bytes() []byte { return m }
 func (m Twstat) Fid() uint32   { return guint32(m[7:11]) }
 func (m Twstat) Stat() Stat    { return msg(m).nthField(7, 0) }
 
@@ -940,6 +969,7 @@ type Rwstat []byte
 func (m Rwstat) Tag() uint16   { return msg(m).Tag() }
 func (m Rwstat) Len() int64    { return msg(m).Len() }
 func (m Rwstat) nbytes() int64 { return msg(m).nbytes() }
+func (m Rwstat) bytes() []byte { return m }
 
 func NewRwstat(buf []byte, tag uint16) (Rwstat, []byte, error) {
 	if len(buf) < maxSizeLUT[msgRwstat] {
@@ -965,4 +995,5 @@ type BadMessage struct {
 func (m BadMessage) Tag() uint16    { return m.tag }
 func (m BadMessage) Len() int64     { return m.length }
 func (m BadMessage) nbytes() int64  { return m.length }
+func (m BadMessage) bytes() []byte  { return nil }
 func (m BadMessage) String() string { return fmt.Sprintf("bad message: %v", m.Err) }
