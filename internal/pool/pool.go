@@ -11,9 +11,10 @@ import (
 	"sync/atomic"
 )
 
-// DefaultPoolMax is the default ceilinging for the
-// zero value of a Pool.
-const DefaultPoolMax = ^uint32(0)
+const (
+	FidPoolCeiling = ^uint32(0)
+	TagPoolCeiling = uint32(^uint16(0))
+)
 
 // save some typing
 var (
@@ -27,49 +28,73 @@ func (s uint32slice) Less(i, j int) bool { return s[i] < s[j] }
 func (s uint32slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s uint32slice) Len() int           { return len(s) }
 
-// New creates a new Pool. Numbers returned
-// by the Get method on the returned Pool will
-// not exceed ceiling - 1.
-func New(ceiling uint32) *Pool {
-	return &Pool{ceiling: ceiling}
-}
-
-// BUG(droyo): The Pool implementation allocates numbers in a contiguous
+// BUG(droyo): The pool implementation allocates numbers in a contiguous
 // sequence from [0, max). When a number X is Free'd, but is not at
-// the end of the sequence, the Pool implementation cannot use it until
+// the end of the sequence, the FidPool implementation cannot use it until
 // all allocated numbers greater than X have also been freed. While
-// this can result in Pools becoming full prematurely for certain
-// pathological workloads, this tradeoff allows a Pool to be simple,
+// this can result in FidPools becoming full prematurely for certain
+// pathological workloads, this tradeoff allows a FidPool to be simple,
 // and small, and allows the Get implementation to be lock-free.
 
-// A Pool maintains a pool of free identifiers.  It is safe for
-// concurrent use. The zero value of a Pool is an empty pool that will
-// provide identifiers in the range [0, DefaultPoolSize).
-type Pool struct {
-	next, ceiling uint32
+// A FidPool maintains a pool of free identifiers.  It is safe for
+// concurrent use. The zero value of a FidPool is an empty pool that will
+// provide identifiers in the range [0, DefaultFidPoolSize).
+type FidPool struct {
+	pool
+}
+
+type pool struct {
+	next uint32
 
 	mu      sync.Mutex // protects the clunked slice
 	clunked []uint32   // items we've discarded
 }
 
-// Get retrieves a free identifier from a pool. If the pool is full,
+// A TagPool is suitable for allocating tags for
+// 9P messages.
+type TagPool struct {
+	pool
+}
+
+// Get retrieves a free identifier from a TagPool. If the pool is full,
 // the second return value of Get will be false. Once an identifier
 // is no longer needed, it must be released using the Free method.
-func (p *Pool) Get() (id uint32, notfull bool) {
-	// This makes the zero value of Pool usable as a fid pool
-	cas(&p.ceiling, 0, DefaultPoolMax)
+// The return value is guaranteed to be less than TagPoolCeiling.
+func (p *TagPool) Get() (tag uint16, ok bool) {
+	t, notfull := p.get(TagPoolCeiling)
+	return uint16(t), notfull
+}
 
-	if cas(&p.next, p.ceiling, p.ceiling-1) {
+// Get retrieves a free identifier from a FidPool. If the pool is full,
+// the second return value of Get will be false. Once an identifier
+// is no longer needed, it must be released using the Free method.
+// The return value is guaranteed to be less than FidPoolCeiling.
+func (p *FidPool) Get() (fid uint32, ok bool) {
+	return p.get(FidPoolCeiling)
+}
+
+func (p *pool) get(ceil uint32) (id uint32, ok bool) {
+	if cas(&p.next, ceil, ceil-1) {
 		return 0, false
 	}
-
 	return add(&p.next, 1) - 1, true
 }
 
-// After Free returns, it is valid for subsequent calls to Get on the
-// same pool to return old. Free may only be called once
-// for any given identifier.
-func (p *Pool) Free(old uint32) {
+// Free releases a tag. After Free returns, it is valid for subsequent
+// calls to Get on the same pool to return old. Free may only be called
+// once for any given tag.
+func (p *TagPool) Free(old uint16) {
+	p.free(uint32(old))
+}
+
+// Free releases a fid. After Free returns, it is valid for subsequent
+// calls to Get on the same pool to return old. Free may only be called
+// once for any given fid.
+func (p *FidPool) Free(old uint32) {
+	p.free(old)
+}
+
+func (p *pool) free(old uint32) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

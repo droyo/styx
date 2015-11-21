@@ -2,18 +2,8 @@ package pool
 
 import "testing"
 
-func TestPoolFull(t *testing.T) {
-	p := New(1)
-	p.Get()
-
-	_, ok := p.Get()
-	if ok {
-		t.Errorf("Get from full pool did not fail")
-	}
-}
-
 func TestPoolFree(t *testing.T) {
-	var pool Pool
+	var pool FidPool
 
 	for i := 0; i < 100; i++ {
 		if n, ok := pool.Get(); !ok {
@@ -36,7 +26,7 @@ func TestPoolFree(t *testing.T) {
 }
 
 func TestPool(t *testing.T) {
-	var pool Pool
+	var pool FidPool
 
 	// We're abusing defer a little bit here; this runs
 	// after all ids have been freed, so we should expect
