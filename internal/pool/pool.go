@@ -1,3 +1,8 @@
+// Package pool manages pools of integer identifiers.
+//
+// The pool package provides a thread-safe allocator for
+// unique 32-bit integers. It is used to manage fid and tag
+// pools for 9P clients.
 package pool
 
 import (
