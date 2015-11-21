@@ -1,5 +1,7 @@
 package styxproto
 
+import "errors"
+
 type parseError string
 
 func (p parseError) Error() string { return string(p) }
@@ -26,3 +28,8 @@ var (
 	errUnderSize      = parseError("empty space in message")
 	errZeroLen        = parseError("zero-length message")
 )
+
+// ErrMaxSize is returned during the parsing process if a message
+// exceeds the maximum size negotiated during the Tversion/Rversion
+// transaction.
+var ErrMaxSize = errors.New("message exceeds msize")

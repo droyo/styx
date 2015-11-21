@@ -32,7 +32,7 @@ func NewDecoderSize(r io.Reader, bufsize int) *Decoder {
 	if bufsize < MinBufSize {
 		bufsize = MinBufSize
 	}
-	return &Decoder{r: r, br: bufio.NewReaderSize(r, bufsize)}
+	return &Decoder{r: r, br: bufio.NewReaderSize(r, bufsize), MaxSize: -1}
 }
 
 // A Decoder provides an interface for reading a stream of 9P
@@ -45,6 +45,10 @@ func NewDecoderSize(r io.Reader, bufsize int) *Decoder {
 // method should be delegated to a single thread of execution or
 // protected by a mutex.
 type Decoder struct {
+	// MaxSize is the maximum size message that a Decoder will accept. If
+	// MaxSize is -1, a Decoder will accept any size message.
+	MaxSize int64
+
 	// input source. we need to expose this so we can stitch together
 	// an io.Reader for large Twrite/Rread messages.
 	r io.Reader

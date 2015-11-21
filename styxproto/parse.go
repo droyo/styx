@@ -110,6 +110,10 @@ func (s *Decoder) fetchOne(result []Msg) ([]Msg, error) {
 	}
 
 	msgType := dot.Type()
+	msgSize := dot.Len()
+	if s.MaxSize > 0 && msgSize > s.MaxSize {
+		return result, ErrMaxSize
+	}
 
 	minSize := minSizeLUT[msgType]
 	if s.buflen()-minSize < s.dotlen() && !first {
