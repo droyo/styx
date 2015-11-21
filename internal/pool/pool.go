@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 )
 
-// DefaultPoolMax is the default maximum for the
+// DefaultPoolMax is the default ceilinging for the
 // zero value of a Pool.
 const DefaultPoolMax = ^uint32(0)
 
@@ -29,9 +29,9 @@ func (s uint32slice) Len() int           { return len(s) }
 
 // New creates a new Pool. Numbers returned
 // by the Get method on the returned Pool will
-// not exceed max - 1.
-func New(max uint32) *Pool {
-	return &Pool{max: max}
+// not exceed ceiling - 1.
+func New(ceiling uint32) *Pool {
+	return &Pool{ceiling: ceiling}
 }
 
 // BUG(droyo): To save space, the Pool implementation allocates numbers
@@ -47,7 +47,7 @@ func New(max uint32) *Pool {
 // concurrent use. The zero value of a Pool is an empty pool that will
 // provide identifiers in the range [0, DefaultPoolSize).
 type Pool struct {
-	next, max uint32
+	next, ceiling uint32
 
 	mu      sync.Mutex // protects the clunked slice
 	clunked []uint32   // items we've discarded
@@ -58,9 +58,9 @@ type Pool struct {
 // is no longer needed, it must be released using the Free method.
 func (p *Pool) Get() (id uint32, notfull bool) {
 	// This makes the zero value of Pool usable as a fid pool
-	cas(&p.max, 0, DefaultPoolMax)
+	cas(&p.ceiling, 0, DefaultPoolMax)
 
-	if cas(&p.next, p.max, p.max-1) {
+	if cas(&p.next, p.ceiling, p.ceiling-1) {
 		return 0, false
 	}
 
