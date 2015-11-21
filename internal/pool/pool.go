@@ -29,10 +29,9 @@ func New(max uint32) *Pool {
 	return &Pool{max: max}
 }
 
-// A Pool maintains a pool of free identifiers.
-// It is safe for concurrent use. The zero value
-// of a Pool is an empty pool that will provide
-// identifiers in the range [0, DefaultPoolSize).
+// A Pool maintains a pool of free identifiers.  It is safe for
+// concurrent use. The zero value of a Pool is an empty pool that will
+// provide identifiers in the range [0, DefaultPoolSize).
 type Pool struct {
 	next, max uint32
 
@@ -51,25 +50,24 @@ func (p *Pool) Get() (id uint32, notfull bool) {
 		return 0, false
 	}
 
-	return add(&p.next, 1), true
+	return add(&p.next, 1) - 1, true
 }
 
 // After Free returns, it is valid for subsequent calls to Get on the
-// same pool to return old.
+// same pool to return old. Free may only be called once
+// for any given identifier.
 func (p *Pool) Free(old uint32) {
-	// best case; old was returned by the latest call to Get
-	if cas(&p.next, old+1, old) {
-		return
-	}
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.clunked = append(p.clunked, old)
-	sort.Sort(uint32slice(p.clunked))
+	// best case; old was returned by the latest call to Get
+	if !cas(&p.next, old+1, old) {
+		p.clunked = append(p.clunked, old)
+		sort.Sort(uint32slice(p.clunked))
+	}
 
 	for i := len(p.clunked); i > 0; i-- {
-		if cas(&p.next, p.clunked[i]+1, p.clunked[i]) {
+		if cas(&p.next, p.clunked[i-1]+1, p.clunked[i-1]) {
 			p.clunked = p.clunked[:len(p.clunked)-1]
 		} else {
 			break
