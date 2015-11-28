@@ -126,7 +126,7 @@ func (s *Decoder) Next() bool {
 	}
 
 	if err := s.fetchMessages(); err != nil {
-		return false
+		return len(s.msg) > 0
 	}
 	return true
 }
