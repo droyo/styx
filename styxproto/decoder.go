@@ -68,6 +68,17 @@ type Decoder struct {
 	err error
 }
 
+// Reset resets a Decoder with a new io.Reader.
+func (s *Decoder) Reset(r io.Reader) {
+	s.MaxSize = -1
+	s.r = r
+	s.br.Reset(s.r)
+	s.start = 0
+	s.pos = 0
+	s.msg = s.msg[:0]
+	s.err = nil
+}
+
 // Err returns the first error encountered during parsing.
 // If the underyling io.Reader was closed in the middle of
 // a message, Err will return io.ErrUnexpectedEOF. Otherwise,
