@@ -3,20 +3,12 @@ package styxproto
 import (
 	"bufio"
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"io"
 )
 
 var (
 	errShortRead = errors.New("not enough data in buffer to complete message")
-)
-
-// Shorthand for parsing numbers
-var (
-	guint16 = binary.LittleEndian.Uint16
-	guint32 = binary.LittleEndian.Uint32
-	guint64 = binary.LittleEndian.Uint64
 )
 
 var msgParseLUT = [...]func(msg, io.Reader) (Msg, error){

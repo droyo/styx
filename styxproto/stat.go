@@ -14,36 +14,36 @@ type Stat []byte
 // The 2-byte type field contains implementation-specific data
 // that is outside the scope of the 9P protocol.
 func (s Stat) Type() uint16     { return guint16(s[2:4]) }
-func (s Stat) SetType(t uint16) { puint16(s[:2], t) }
+func (s Stat) SetType(t uint16) { buint16(s[2:4], t) }
 
 // The 4-byte dev field contains implementation-specific data
 // that is outside the scope of the 9P protocol. In Plan 9, it holds
 // an identifier for the block device that stores the file.
 func (s Stat) Dev() uint32     { return guint32(s[4:8]) }
-func (s Stat) SetDev(d uint32) { puint32(s[:4], d) }
+func (s Stat) SetDev(d uint32) { buint32(s[4:8], d) }
 
 // Qid returns the unique identifier of the file.
 func (s Stat) Qid() Qid     { return Qid(s[8:21]) }
-func (s Stat) SetQid(q Qid) { pqid(s[:8], q) }
+func (s Stat) SetQid(q Qid) { copy(s[8:21], q) }
 
 // Mode contains the permissions and flags set for the file.
 // Permissions follow the unix model; the 3 least-significant
 // 3-bit triads describe read, write, and execute access for
 // owners, group members, and other users, respectively.
 func (s Stat) Mode() uint32     { return guint32(s[21:25]) }
-func (s Stat) SetMode(m uint32) { puint32(s[:21], m) }
+func (s Stat) SetMode(m uint32) { buint32(s[21:25], m) }
 
 // Atime returns the last access time for the file, in seconds since the epoch.
 func (s Stat) Atime() uint32     { return guint32(s[25:29]) }
-func (s Stat) SetAtime(t uint32) { puint32(s[:25], t) }
+func (s Stat) SetAtime(t uint32) { buint32(s[25:29], t) }
 
 // Mtime returns the last time the file was modified, in seconds since the epoch.
 func (s Stat) Mtime() uint32     { return guint32(s[29:33]) }
-func (s Stat) SetMtime(t uint32) { puint32(s[:29], t) }
+func (s Stat) SetMtime(t uint32) { buint32(s[29:33], t) }
 
 // Length returns the length of the file in bytes.
 func (s Stat) Length() int64     { return int64(guint64(s[33:41])) }
-func (s Stat) SetLength(n int64) { puint64(s[:33], uint64(n)) }
+func (s Stat) SetLength(n int64) { buint64(s[33:41], uint64(n)) }
 
 // Name returns the name of the file.
 func (s Stat) Name() []byte { return msg(s).nthField(41, 0) }
@@ -79,11 +79,26 @@ func NewStat(buf []byte, name, uid, gid, muid string) (Stat, []byte, error) {
 	if len(buf) < minStatLen+len(uid)+len(gid)+len(muid) {
 		return nil, buf, io.ErrShortBuffer
 	}
-	b := buf[:41]
-	b = pstring(b, name, uid, gid, muid)
-	puint16(buf[:0], uint16(len(b)-2))
 
-	return Stat(b), buf[len(b):], nil
+	b := buf[41:]
+	buint16(b, uint16(len(name)))
+	b = b[2:]
+	b = b[copy(b, name):]
+
+	buint16(b, uint16(len(uid)))
+	b = b[2:]
+	b = b[copy(b, uid):]
+
+	buint16(b, uint16(len(gid)))
+	b = b[2:]
+	b = b[copy(b, gid):]
+
+	buint16(b, uint16(len(muid)))
+	b = b[2:]
+	b = b[copy(b, muid):]
+
+	buint32(buf[:4], uint32(len(buf)-len(b)))
+	return Stat(buf[:len(buf)-len(b)]), b, nil
 }
 
 // verifyStat ensures that a Stat structure is valid and safe to use

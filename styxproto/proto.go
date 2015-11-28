@@ -7,6 +7,8 @@ import (
 	"io"
 	"math"
 	"strings"
+
+	"aqwari.net/net/styx/internal"
 )
 
 var (
@@ -89,21 +91,16 @@ func (m Tversion) Msize() int64 { return int64(guint32(m[7:11])) }
 // The string must always begin with the two characters "9P".
 func (m Tversion) Version() []byte { return msg(m).nthField(11, 0) }
 
-// NewTversion creates a new Tversion message. The
-// Tversion's tag is set to NoTag. Any space left over
-// in buf is returned.
-func NewTversion(buf []byte, msize uint32, version string) (Tversion, []byte, error) {
+// WriteTversion writes a Tversion message to w.
+func WriteTversion(w io.Writer, msize uint32, version string) (int, error) {
 	if len(version) > MaxVersionLen {
-		return nil, buf, errLongVersion
+		return 0, errLongVersion
 	}
-	if len(buf) < minSizeLUT[msgTversion]+len(version) {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTversion, NoTag, msize)
-	b = pstring(b, version)
-	writelen(b)
-
-	return Tversion(b), buf[len(b):], nil
+	size := uint32(minSizeLUT[msgTversion] + len(version))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTversion, NoTag, msize)
+	pstring(ew, version)
+	return ew.N, ew.Err
 }
 
 func (m Tversion) String() string {
@@ -137,15 +134,16 @@ func (m Rversion) Msize() int64 { return Tversion(m).Msize() }
 // is less than or equal to that supported by the client.
 func (m Rversion) Version() []byte { return Tversion(m).Version() }
 
-// NewRversion creates a new Rversion message. The
-// Rversion's tag is set to NoTag. Any space left over
-// in buf is returned.
-func NewRversion(buf []byte, msize uint32, version string) (Rversion, []byte, error) {
-	m, rest, err := NewTversion(buf, msize, version)
-	if len(m) > 4 {
-		m[4] = msgRversion
+// WriteRversion writes a Rversion message to w.
+func WriteRversion(w io.Writer, msize uint32, version string) (int, error) {
+	if len(version) > MaxVersionLen {
+		return 0, errLongVersion
 	}
-	return Rversion(m), rest, err
+	size := uint32(minSizeLUT[msgRversion] + len(version))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRversion, NoTag, msize)
+	pstring(ew, version)
+	return ew.N, ew.Err
 }
 
 func (m Rversion) String() string {
@@ -174,27 +172,21 @@ func (m Tauth) Uname() []byte { return msg(m).nthField(11, 0) }
 // may be empty.
 func (m Tauth) Aname() []byte { return msg(m).nthField(11, 1) }
 
-// NewTauth writes a new Tauth message to buf. If buf is not long
-// enough to hold the Tauth message, io.ErrShortBuffer is returned.
-// An error is returned if uname or aname are longer than MaxUidLen
-// and MaxAttachLen, respectively. Any additional space in buf is
-// returned from NewTauth.
-func NewTauth(buf []byte, tag uint16, afid uint32, uname, aname string) (Tauth, []byte, error) {
+// WriteTauth writes a Tauth message to w. The uname and aname
+// parameters must be shorter than MaxUidLen and MaxAttachLen,
+// respectively.
+func WriteTauth(w io.Writer, tag uint16, afid uint32, uname, aname string) (int, error) {
 	if len(uname) > MaxUidLen {
-		return nil, buf, errLongUsername
+		return 0, errLongUsername
 	}
 	if len(aname) > MaxAttachLen {
-		return nil, buf, errLongAname
+		return 0, errLongAname
 	}
-	sz := minSizeLUT[msgTauth] + len(uname) + len(aname)
-	if len(buf) < sz {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTauth, tag, afid)
-	b = pstring(b, uname, aname)
-	writelen(b)
-
-	return Tauth(b), buf[len(b):], nil
+	size := uint32(minSizeLUT[msgTauth] + len(uname) + len(aname))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTauth, tag, afid)
+	pstring(ew, uname, aname)
+	return ew.N, ew.Err
 }
 
 func (m Tauth) String() string {
@@ -215,18 +207,13 @@ func (m Rauth) bytes() []byte { return m }
 func (m Rauth) Aqid() Qid      { return Qid(m[7:20]) }
 func (m Rauth) String() string { return fmt.Sprintf("Rauth aqid=%q", m.Aqid()) }
 
-// NewRauth creates a new Rauth message. If buf is not long enough
-// to hold the Rauth message, io.ErrShortBuffer is returned. NewRauth
-// returns any additional space left in buf.
-func NewRauth(buf []byte, tag uint16, qid Qid) (Rauth, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRauth] {
-		return nil, nil, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRauth, tag)
-	b = pqid(b, qid)
-	writelen(b)
-
-	return Rauth(b), buf[len(b):], nil
+// WriteRauth writes a new Rauth message to w.
+func WriteRauth(w io.Writer, tag uint16, qid Qid) (int, error) {
+	size := uint32(maxSizeLUT[msgRauth])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRauth, tag)
+	pqid(ew, qid)
+	return ew.N, ew.Err
 }
 
 // The attach message serves as a fresh introduction from a  user on
@@ -253,27 +240,20 @@ func (m Tattach) Uname() []byte { return msg(m).nthField(15, 0) }
 // Aname is the name of the file tree that the client wants to access.
 func (m Tattach) Aname() []byte { return msg(m).nthField(15, 1) }
 
-// NewTattach writes a new Tattach message to buf. If the client does not want
-// to authenticate, afid should be NoFid. If buf is not long enough to hold the
-// Tattach message, io.ErrShortBuffer is returned. An error is returned if uname
-// or aname are longer than MaxUidLen or MaxAttachLen, respectively. NewTattach
-// returns any remaining space left in buf.
-func NewTattach(buf []byte, tag uint16, fid, afid uint32, uname, aname string) (Tattach, []byte, error) {
+// WriteTattach writes a new Tattach message to w. If the client does not want
+// to authenticate, afid should be NoFid.
+func WriteTattach(w io.Writer, tag uint16, fid, afid uint32, uname, aname string) (int, error) {
 	if len(uname) > MaxUidLen {
-		return nil, buf, errLongUsername
+		return 0, errLongUsername
 	}
 	if len(aname) > MaxAttachLen {
-		return nil, buf, errLongAname
+		return 0, errLongAname
 	}
-	sz := minSizeLUT[msgTattach] + len(uname) + len(aname)
-	if len(buf) < sz {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTattach, tag, fid, afid)
-	b = pstring(b, uname, aname)
-	writelen(b)
-
-	return Tattach(b), buf[len(b):], nil
+	size := uint32(minSizeLUT[msgTattach] + len(uname) + len(aname))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTattach, tag, fid, afid)
+	pstring(ew, uname, aname)
+	return ew.N, ew.Err
 }
 
 func (m Tattach) String() string {
@@ -296,16 +276,13 @@ func (m Rattach) bytes() []byte { return m }
 // with the fid of the corresponding Tattach request.
 func (m Rattach) Qid() Qid { return Qid(m[7:20]) }
 
-// NewRattach writes a new Rattach message to buf. If buf is not
-// long enough to hold an Rattach message, io.ErrShortBuffer is
-// returned. NewRattach will return any remaining space left in
-// buf.
-func NewRattach(buf []byte, tag uint16, qid Qid) (Rattach, []byte, error) {
-	m, rest, err := NewRauth(buf, tag, qid)
-	if len(m) > 4 {
-		m[5] = msgRattach
-	}
-	return Rattach(m), rest, err
+// WriteRattach writes a new Rattach message to w.
+func WriteRattach(w io.Writer, tag uint16, qid Qid) (int, error) {
+	size := uint32(maxSizeLUT[msgRattach])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRattach, tag)
+	pqid(ew, qid)
+	return ew.N, ew.Err
 }
 
 func (m Rattach) String() string { return fmt.Sprintf("Rattach qid=%q", m.Qid()) }
@@ -325,22 +302,25 @@ func (m Rerror) bytes() []byte { return m }
 // Ename is a UTF-8 string describing the error that occured.
 func (m Rerror) Ename() []byte { return msg(m).nthField(7, 0) }
 
-// NewRerror writes a new Rerror message to buf. If buf is not
-// long enough to hold the Rerror message, io.ErrShortBuffer is
-// returned. If ename is longer than MaxErrorLen bytes, it is
-// silently truncated to MaxErrorLen bytes.
-func NewRerror(buf []byte, tag uint16, ename string) (Rerror, []byte, error) {
+// WriteRerror writes a new Rerror message to w. Errfmt may
+// be a printf-style format string, with values filled in from the
+// argument list v. If the error string is longer than MaxErrorLen
+// bytes, it is truncated.
+func WriteRerror(w io.Writer, tag uint16, errfmt string, v ...interface{}) (int, error) {
+	ename := errfmt
+	if len(v) > 0 {
+		ename = fmt.Sprintf(errfmt, v...)
+	}
 	if len(ename) > MaxErrorLen {
 		ename = ename[:MaxErrorLen]
 	}
-	if len(buf) < minSizeLUT[msgRerror]+len(ename) {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRerror, tag)
-	b = pstring(b, ename)
-	writelen(b)
+	size := uint32(minSizeLUT[msgRerror] + len(ename))
+	ew := &internal.ErrWriter{W: w}
 
-	return Rerror(b), buf[len(b):], nil
+	pheader(ew, size, msgRerror, tag)
+	pstring(ew, ename)
+
+	return ew.N, ew.Err
 }
 
 func (m Rerror) String() string { return fmt.Sprintf("Rerror ename=%q", m.Ename()) }
@@ -358,18 +338,13 @@ func (m Tflush) bytes() []byte { return m }
 // The message being flushed is identified by oldtag.
 func (m Tflush) Oldtag() uint16 { return guint16(m[7:9]) }
 
-// NewTflush writes a new Tflush message to buf. If buf is not long
-// enough to hold a Tflush message, io.ErrShortBuffer returns.
-// NewTflush returns any remaining space left in buf.
-func NewTflush(buf []byte, tag, oldtag uint16) (Tflush, []byte, error) {
-	if len(buf) < maxSizeLUT[msgTflush] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTflush, tag)
-	b = puint16(b, oldtag)
-	writelen(b)
-
-	return Tflush(b), buf[len(b):], nil
+// WriteTflush writes a new Tflush message to w.
+func WriteTflush(w io.Writer, tag, oldtag uint16) (int, error) {
+	size := uint32(maxSizeLUT[msgTflush])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTflush, tag)
+	puint16(ew, oldtag)
+	return ew.N, ew.Err
 }
 
 func (m Tflush) String() string { return fmt.Sprintf("Tflush oldtag=%x", m.Oldtag()) }
@@ -387,17 +362,12 @@ func (m Rflush) Len() int64    { return msg(m).Len() }
 func (m Rflush) nbytes() int64 { return msg(m).nbytes() }
 func (m Rflush) bytes() []byte { return m }
 
-// NewRflush writes a new Rflush message to buf. io.ErrShortBuffer is
-// returned if buf is not long enough to hold an Rflush message. Any
-// remaining space in buf is returned from NewRflush.
-func NewRflush(buf []byte, tag uint16) (Rflush, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRflush] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRflush, tag)
-	writelen(b)
-
-	return Rflush(b), buf[len(b):], nil
+// WriteRflush writes a new Rflush message to w.
+func WriteRflush(w io.Writer, tag uint16) (int, error) {
+	size := uint32(maxSizeLUT[msgRflush])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRflush, tag)
+	return ew.N, ew.Err
 }
 
 func (m Rflush) String() string { return "Rflush" }
@@ -431,32 +401,27 @@ func (m Twalk) Nwname() int { return int(guint16(m[15:17])) }
 // that the client wishes to descend into in succession.
 func (m Twalk) Wname(n int) []byte { return msg(m).nthField(17, n) }
 
-// NewTwalk writes a new Twalk message to buf. io.ErrShortBuffer is returned
-// if buf is not long enough to hold the Twalk message.  An error is returned
+// WriteTwalk writes a new Twalk message to w. An error is returned
 // if wname is longer than MaxWElem elements, or if any single element in
 // wname is longer than MaxFilenameLen bytes long.
-func NewTwalk(buf []byte, tag uint16, fid, newfid uint32, wname ...string) (Twalk, []byte, error) {
+func WriteTwalk(w io.Writer, tag uint16, fid, newfid uint32, wname ...string) (int, error) {
 	if len(wname) > MaxWElem {
-		return nil, buf, errMaxWElem
+		return 0, errMaxWElem
 	}
-	space := len(buf) - minSizeLUT[msgTwalk]
+	size := uint32(minSizeLUT[msgTwalk])
 	for _, v := range wname {
 		if len(v) > MaxFilenameLen {
-			return nil, buf, errLongFilename
+			return 0, errLongFilename
 		}
-		if space < 0 {
-			break
-		}
+		size += 2
+		size += uint32(len(v))
 	}
-	if space < 0 {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTwalk, tag, fid, newfid)
-	b = puint16(b, uint16(len(wname)))
-	b = pstring(b, wname...)
-	writelen(b)
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTwalk, tag, fid, newfid)
+	puint16(ew, uint16(len(wname)))
+	pstring(ew, wname...)
 
-	return Twalk(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 
 func (m Twalk) String() string {
@@ -490,23 +455,19 @@ func (m Rwalk) Nwqid() int { return int(guint16(m[7:9])) }
 // requested by the client, up to the first failure.
 func (m Rwalk) Wqid(n int) Qid { return Qid(m[9+n*13 : 9+(n+1)*13]) }
 
-// NewRwalk writes a new Rwalk message to buf. An error is returned if wqid
-// has more than MaxWElem elements. io.ErrShortBuffer is returned if buf
-// is not long enough to hold the Rwalk message.
-func NewRwalk(buf []byte, tag uint16, wqid ...Qid) (Rwalk, []byte, error) {
+// WriteRwalk writes a new Rwalk message to w. An error is returned if wqid
+// has more than MaxWElem elements.
+func WriteRwalk(w io.Writer, tag uint16, wqid ...Qid) (int, error) {
 	if len(wqid) > MaxWElem {
-		return nil, buf, errMaxWElem
+		return 0, errMaxWElem
 	}
-	if len(buf) < minSizeLUT[msgRwalk]+13*len(wqid) {
-		return nil, buf, io.ErrShortBuffer
-	}
+	size := uint32(minSizeLUT[msgRwalk] + 13*len(wqid))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRwalk, tag)
+	puint16(ew, uint16(len(wqid)))
+	pqid(ew, wqid...)
 
-	b := pheader(buf, msgRwalk, tag)
-	b = puint16(b, uint16(len(wqid)))
-	b = pqid(b, wqid...)
-	writelen(b)
-
-	return Rwalk(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 
 func (m Rwalk) String() string {
@@ -554,18 +515,14 @@ func (m Topen) Fid() uint32 { return guint32(m[7:11]) }
 // it on close.
 func (m Topen) Mode() uint8 { return uint8(m[11]) }
 
-// NewTopen writes a new Topen message to buf. io.ErrShortBuffer is returned if
-// buf is not long enough to contain a Topen message. NewTopen returns any
-// remaining space in buf.
-func NewTopen(buf []byte, tag uint16, fid uint32, mode uint8) (Topen, []byte, error) {
-	if len(buf) < maxSizeLUT[msgTopen] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTopen, tag, fid)
-	b = puint8(b, mode)
-	writelen(b)
+// NewTopen writes a new Topen message to w.
+func WriteTopen(w io.Writer, tag uint16, fid uint32, mode uint8) (int, error) {
+	size := uint32(maxSizeLUT[msgTopen])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTopen, tag, fid)
+	puint8(ew, mode)
 
-	return Topen(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 
 func (m Topen) String() string {
@@ -592,19 +549,15 @@ func (m Ropen) Qid() Qid { return Qid(m[7:20]) }
 // into multiple 9P messages
 func (m Ropen) IOunit() int64 { return int64(guint32(m[20:24])) }
 
-// NewRopen writes a new Ropen message to buf. io.ErrShortBuffer is returned if
-// buf is not long enough to hold an Ropen message. Any additional space left
-// in buf is returned.
-func NewRopen(buf []byte, tag uint16, qid Qid, iounit uint32) (Ropen, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRopen] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRopen, tag)
-	b = pqid(b, qid)
-	b = puint32(b, iounit)
-	writelen(b)
+// WriteRopen writes a new Ropen message to w.
+func WriteRopen(w io.Writer, tag uint16, qid Qid, iounit uint32) (int, error) {
+	size := uint32(maxSizeLUT[msgRopen])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRopen, tag)
+	pqid(ew, qid)
+	puint32(ew, iounit)
 
-	return Ropen(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 
 func (m Ropen) String() string {
@@ -626,21 +579,19 @@ func (m Tcreate) Perm() uint32 {
 }
 func (m Tcreate) Mode() uint8 { return m[len(m.Name())+17] }
 
-func NewTcreate(buf []byte, tag uint16, fid uint32, name string, perm uint32, mode uint8) (Tcreate, []byte, error) {
+// WriteTcreate writes a new Tcreate message to w.
+func WriteTcreate(w io.Writer, tag uint16, fid uint32, name string, perm uint32, mode uint8) (int, error) {
 	if len(name) > MaxFilenameLen {
-		return nil, buf, errLongFilename
+		return 0, errLongFilename
 	}
-	if len(buf) < minSizeLUT[msgTcreate]+len(name) {
-		return nil, buf, io.ErrShortBuffer
-	}
+	size := uint32(minSizeLUT[msgTcreate] + len(name))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTcreate, tag, fid)
+	pstring(ew, name)
+	puint32(ew, perm)
+	puint8(ew, mode)
 
-	b := pheader(buf, msgTcreate, tag, fid)
-	b = pstring(b, name)
-	b = puint32(b, perm)
-	b = puint8(b, mode)
-	writelen(b)
-
-	return Tcreate(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 
 func (m Tcreate) String() string {
@@ -657,16 +608,15 @@ func (m Rcreate) bytes() []byte { return m }
 func (m Rcreate) Qid() Qid      { return Qid(m[7:20]) }
 func (m Rcreate) IOunit() int64 { return int64(guint32(m[20:24])) }
 
-func NewRcreate(buf []byte, tag uint16, qid Qid, iounit uint32) (Rcreate, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRcreate] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRcreate, tag)
-	b = pqid(b, qid)
-	b = puint32(b, iounit)
-	writelen(b)
+// WriteRcreate writes a new Rcreate message to w.
+func WriteRcreate(w io.Writer, tag uint16, qid Qid, iounit uint32) (int, error) {
+	size := uint32(maxSizeLUT[msgRcreate])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRcreate, tag)
+	pqid(ew, qid)
+	puint32(ew, iounit)
 
-	return Rcreate(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 
 func (m Rcreate) String() string {
@@ -692,21 +642,18 @@ func (m Tread) Offset() int64 { return int64(guint64(m[11:19])) }
 // integer.
 func (m Tread) Count() int64 { return int64(guint32(m[19:23])) }
 
-// NewTread creates a New Tread message The offset must be smaller
-// than MaxOffset.
-func NewTread(buf []byte, tag uint16, fid uint32, offset, count int64) (Tread, []byte, error) {
-	if len(buf) < maxSizeLUT[msgTread] {
-		return nil, buf, io.ErrShortBuffer
+// WriteTread writes a new Tread message to w. An error is returned
+// if count is greater than the maximum value of a 32-bit unsigned integer.
+func WriteTread(w io.Writer, tag uint16, fid uint32, offset, count int64) (int, error) {
+	if count > math.MaxUint32 {
+		return 0, errMaxCount
 	}
-	if math.MaxUint32-int64(maxSizeLUT[msgRwrite]) < count {
-		return nil, buf, errMaxCount
-	}
-	b := pheader(buf, msgTread, tag, fid)
-	b = puint64(b, uint64(offset))
-	b = puint32(b, uint32(count))
-	writelen(b)
-
-	return Tread(b), buf[len(b):], nil
+	size := uint32(maxSizeLUT[msgTread])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTread, tag, fid)
+	puint64(ew, uint64(offset))
+	puint32(ew, uint32(count))
+	return ew.N, ew.Err
 }
 
 func (m Tread) String() string {
@@ -730,24 +677,17 @@ func (m Rread) nbytes() int64 { return m.msg.nbytes() }
 func (m Rread) bytes() []byte { return m.msg[:11] }
 func (m Rread) Count() int64  { return int64(guint32(m.msg[7:11])) }
 
-// NewRread writes a new Rread message to buf.  An error is returned if
-// count exceeds the maximum size of a 9P message.  If buf is not large
-// enough to contain the header of the Rread request, io.ErrShortBuffer is
-// returned. The data parameter is used as-is and is not copied.
-func NewRread(buf []byte, tag uint16, count int64, data io.Reader) (Rread, []byte, error) {
-	if len(buf) < minSizeLUT[msgRread] {
-		return Rread{}, buf, io.ErrShortBuffer
+// WriteRread writes a new Rread message to w.  An error is returned if
+// count exceeds the maximum size of a 9P message.
+func WriteRread(w io.Writer, tag uint16, count int64, data io.Reader) (int, error) {
+	if math.MaxUint32-int64(minSizeLUT[msgRread]) < count {
+		return 0, errTooBig
 	}
-	if math.MaxUint32-int64(maxSizeLUT[msgRwrite]) < count {
-		return Rread{}, buf, errTooBig
-	}
-	b := pheader(buf, msgRread, tag, uint32(count))
-	if math.MaxUint32-int64(count) < int64(len(b)) {
-		return Rread{}, buf, errTooBig
-	}
-	puint32(b[:0], uint32(len(b))+uint32(count))
-
-	return Rread{Reader: io.LimitReader(data, int64(count)), msg: b}, buf[len(b):], nil
+	size := uint32(minSizeLUT[msgRread]) + uint32(count)
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRread, tag, uint32(count))
+	io.CopyN(ew, data, count)
+	return ew.N, ew.Err
 }
 
 func (m Rread) String() string { return fmt.Sprintf("Rread count=%d", m.Count()) }
@@ -768,22 +708,19 @@ func (m Twrite) Fid() uint32   { return Tread(m.msg).Fid() }
 func (m Twrite) Offset() int64 { return Tread(m.msg).Offset() }
 func (m Twrite) Count() int64  { return Tread(m.msg).Count() }
 
-func NewTwrite(buf []byte, tag uint16, fid uint32, offset, count int64, data io.Reader) (Twrite, []byte, error) {
-	if len(buf) < minSizeLUT[msgTwrite] {
-		return Twrite{}, buf, io.ErrShortBuffer
+// WriteTwrite writes a Twrite message to w. An error is returned
+// if the message cannot fit inside a single 9P message.
+func WriteTwrite(w io.Writer, tag uint16, fid uint32, offset, count int64, data io.Reader) (int, error) {
+	if math.MaxUint32-int64(minSizeLUT[msgTwrite]) < count {
+		return 0, errTooBig
 	}
-	if math.MaxUint32-int64(maxSizeLUT[msgRwrite]) < count {
-		return Twrite{}, buf, errTooBig
-	}
-	b := pheader(buf, msgTwrite, tag, fid)
-	b = puint64(b, uint64(offset))
-	b = puint32(b, uint32(count))
-	if math.MaxUint32-int64(count) < int64(len(b)) {
-		return Twrite{}, buf, errTooBig
-	}
-	puint32(b[:0], uint32(len(b))+uint32(count))
-
-	return Twrite{Reader: io.LimitReader(data, int64(count)), msg: b}, buf[len(b):], nil
+	size := uint32(minSizeLUT[msgTwrite]) + uint32(count)
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTwrite, tag, fid)
+	puint64(ew, uint64(offset))
+	puint32(ew, uint32(count))
+	io.CopyN(ew, data, count)
+	return ew.N, ew.Err
 }
 
 func (m Twrite) String() string {
@@ -799,17 +736,18 @@ func (m Rwrite) nbytes() int64 { return msg(m).nbytes() }
 func (m Rwrite) bytes() []byte { return m }
 func (m Rwrite) Count() uint32 { return guint32(m[7:11]) }
 
-func NewRwrite(buf []byte, tag uint16, count int64) (Rwrite, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRwrite] {
-		return nil, buf, io.ErrShortBuffer
+// WriteRwrite writes an Rwrite message to w. An error is returned
+// if count is greater than the maximum value of a 32-bit unsigned
+// integer.
+func WriteRwrite(w io.Writer, tag uint16, count int64) (int, error) {
+	if count > math.MaxUint32 {
+		return 0, errMaxCount
 	}
-	if math.MaxUint32-int64(maxSizeLUT[msgRwrite]) < count {
-		return nil, buf, errMaxCount
-	}
-	b := pheader(buf, msgRwrite, tag, uint32(count))
-	writelen(b)
+	size := uint32(maxSizeLUT[msgRwrite])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRwrite, tag, uint32(count))
 
-	return Rwrite(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 
 func (m Rwrite) String() string { return fmt.Sprintf("Rwrite count=%d", m.Count()) }
@@ -826,14 +764,12 @@ func (m Tclunk) nbytes() int64 { return msg(m).nbytes() }
 func (m Tclunk) bytes() []byte { return m }
 func (m Tclunk) Fid() uint32   { return guint32(m[7:11]) }
 
-func NewTclunk(buf []byte, tag uint16, fid uint32) (Tclunk, []byte, error) {
-	if len(buf) < maxSizeLUT[msgTclunk] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTclunk, tag, fid)
-	writelen(b)
-
-	return Tclunk(b), buf[len(b):], nil
+// WriteTclunk writes a Tclunk message to w.
+func WriteTclunk(w io.Writer, tag uint16, fid uint32) (int, error) {
+	size := uint32(maxSizeLUT[msgTclunk])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTclunk, tag, fid)
+	return ew.N, ew.Err
 }
 func (m Tclunk) String() string { return fmt.Sprintf("Tclunk fid=%d", m.Fid()) }
 
@@ -844,14 +780,12 @@ func (m Rclunk) Len() int64    { return msg(m).Len() }
 func (m Rclunk) nbytes() int64 { return msg(m).nbytes() }
 func (m Rclunk) bytes() []byte { return m }
 
-func NewRclunk(buf []byte, tag uint16) (Rclunk, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRclunk] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRclunk, tag)
-	writelen(b)
-
-	return Rclunk(b), buf[len(b):], nil
+// WriteRclunk writes an Rclunk message to w.
+func WriteRclunk(w io.Writer, tag uint16) (int, error) {
+	size := uint32(maxSizeLUT[msgRclunk])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRclunk, tag)
+	return ew.N, ew.Err
 }
 func (m Rclunk) String() string { return "Rclunk" }
 
@@ -863,14 +797,12 @@ func (m Tremove) nbytes() int64 { return msg(m).nbytes() }
 func (m Tremove) bytes() []byte { return m }
 func (m Tremove) Fid() uint32   { return guint32(m[7:11]) }
 
-func NewTremove(buf []byte, tag uint16, fid uint32) (Tremove, []byte, error) {
-	if len(buf) < maxSizeLUT[msgTremove] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTremove, tag, fid)
-	writelen(b)
-
-	return Tremove(b), buf[len(b):], nil
+// WriteTremove writes a Tremove message to w.
+func WriteTremove(w io.Writer, tag uint16, fid uint32) (int, error) {
+	size := uint32(maxSizeLUT[msgTremove])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTremove, tag, fid)
+	return ew.N, ew.Err
 }
 func (m Tremove) String() string { return fmt.Sprintf("Tremove fid=%d", m.Fid()) }
 
@@ -881,14 +813,12 @@ func (m Rremove) Len() int64    { return msg(m).Len() }
 func (m Rremove) nbytes() int64 { return msg(m).nbytes() }
 func (m Rremove) bytes() []byte { return m }
 
-func NewRremove(buf []byte, tag uint16) (Rremove, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRremove] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRremove, tag)
-	writelen(b)
-
-	return Rremove(b), buf[len(b):], nil
+// WriteRremove writes an Rremove message to w.
+func WriteRremove(w io.Writer, tag uint16) (int, error) {
+	size := uint32(maxSizeLUT[msgRremove])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRremove, tag)
+	return ew.N, ew.Err
 }
 func (m Rremove) String() string { return "Rremove" }
 
@@ -900,14 +830,12 @@ func (m Tstat) nbytes() int64 { return msg(m).nbytes() }
 func (m Tstat) bytes() []byte { return m }
 func (m Tstat) Fid() uint32   { return guint32(m[7:11]) }
 
-func NewTstat(buf []byte, tag uint16, fid uint32) (Tstat, []byte, error) {
-	if len(buf) < maxSizeLUT[msgTstat] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTstat, tag, fid)
-	writelen(b)
-
-	return Tstat(b), buf[len(b):], nil
+// WriteTstat writes a Tstat message to w.
+func WriteTstat(w io.Writer, tag uint16, fid uint32) (int, error) {
+	size := uint32(maxSizeLUT[msgTstat])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTstat, tag, fid)
+	return ew.N, ew.Err
 }
 func (m Tstat) String() string { return fmt.Sprintf("Tstat fid=%d", m.Fid()) }
 
@@ -919,21 +847,20 @@ func (m Rstat) nbytes() int64 { return msg(m).nbytes() }
 func (m Rstat) bytes() []byte { return m }
 func (m Rstat) Stat() Stat    { return msg(m).nthField(7, 0) }
 
-func NewRstat(buf []byte, tag uint16, stat Stat) (Rstat, []byte, error) {
+// WriteRstat writes an Rstat message to w.
+func WriteRstat(w io.Writer, tag uint16, stat Stat) (int, error) {
 	if len(stat) > maxStatLen {
-		return nil, buf, errLongStat
+		return 0, errLongStat
 	}
 	if len(stat) < minStatLen {
-		return nil, buf, errShortStat
+		return 0, errShortStat
 	}
-	if len(buf) < minSizeLUT[msgRstat]+len(stat) {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRstat, tag)
-	b = pbyte(b, stat)
-	writelen(b)
+	size := uint32((minSizeLUT[msgRstat] - minStatLen) + len(stat))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRstat, tag)
+	pbyte(ew, stat)
 
-	return Rstat(b), buf[len(b):], nil
+	return ew.N, ew.Err
 }
 func (m Rstat) String() string { return "Rstat " + m.Stat().String() }
 
@@ -946,21 +873,19 @@ func (m Twstat) bytes() []byte { return m }
 func (m Twstat) Fid() uint32   { return guint32(m[7:11]) }
 func (m Twstat) Stat() Stat    { return msg(m).nthField(7, 0) }
 
-func NewTwstat(buf []byte, tag uint16, fid uint32, stat Stat) (Twstat, []byte, error) {
+// WriteTwstat writes a Twstat message to w.
+func WriteTwstat(w io.Writer, tag uint16, fid uint32, stat Stat) (int, error) {
 	if len(stat) > maxStatLen {
-		return nil, buf, errLongStat
+		return 0, errLongStat
 	}
 	if len(stat) < minStatLen {
-		return nil, buf, errShortStat
+		return 0, errShortStat
 	}
-	if len(buf) < minSizeLUT[msgTwstat]+len(stat) {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgTwstat, tag)
-	b = pbyte(b, stat)
-	writelen(b)
-
-	return Twstat(b), buf[len(b):], nil
+	size := uint32(minSizeLUT[msgTwstat] + len(stat))
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgTwstat, tag)
+	pbyte(ew, stat)
+	return ew.N, ew.Err
 }
 func (m Twstat) String() string { return fmt.Sprintf("Twstat fid=%d stat=%q", m.Fid(), m.Stat()) }
 
@@ -971,14 +896,12 @@ func (m Rwstat) Len() int64    { return msg(m).Len() }
 func (m Rwstat) nbytes() int64 { return msg(m).nbytes() }
 func (m Rwstat) bytes() []byte { return m }
 
-func NewRwstat(buf []byte, tag uint16) (Rwstat, []byte, error) {
-	if len(buf) < maxSizeLUT[msgRwstat] {
-		return nil, buf, io.ErrShortBuffer
-	}
-	b := pheader(buf, msgRwstat, tag)
-	writelen(b)
-
-	return Rwstat(b), buf[len(b):], nil
+// WriteRwstat writes an Rwstat message to w.
+func WriteRwstat(w io.Writer, tag uint16) (int, error) {
+	size := uint32(maxSizeLUT[msgRwstat])
+	ew := &internal.ErrWriter{W: w}
+	pheader(ew, size, msgRwstat, tag)
+	return ew.N, ew.Err
 }
 func (m Rwstat) String() string { return "Rwstat" }
 

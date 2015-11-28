@@ -18,12 +18,12 @@ func NewQid(buf []byte, qtype uint8, version uint32, path uint64) (Qid, []byte, 
 	if len(buf) < 13 {
 		return nil, buf, io.ErrShortBuffer
 	}
-	b := buf[:0]
-	b = puint8(b, qtype)
-	b = puint32(b, version)
-	b = puint64(b, path)
 
-	return Qid(b), buf[len(b):], nil
+	buf[0] = qtype
+	buint32(buf[1:5], version)
+	buint64(buf[5:13], path)
+
+	return Qid(buf[:13]), buf[13:], nil
 }
 
 // Type returns the type of a file (directory, etc)

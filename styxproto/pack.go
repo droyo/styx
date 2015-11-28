@@ -4,84 +4,73 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+
+	"aqwari.net/net/styx/internal"
+)
+
+// Shorthand for parsing numbers
+var (
+	guint16 = binary.LittleEndian.Uint16
+	guint32 = binary.LittleEndian.Uint32
+	guint64 = binary.LittleEndian.Uint64
+
+	buint16 = binary.LittleEndian.PutUint16
+	buint32 = binary.LittleEndian.PutUint32
+	buint64 = binary.LittleEndian.PutUint64
 )
 
 // bit-packing functions. caller is expected to check that the backing
 // slice has enough space for whatever they're writing; these functions
 // extend their argument slice by the amount of data encoded.
 
-func puint8(b []byte, v uint8) []byte {
-	b = b[:len(b)+1]
-	b[len(b)-1] = v
-	return b
+func puint8(w *internal.ErrWriter, v uint8) {
+	w.WriteByte(v)
 }
 
-func puint16(b []byte, v uint16) []byte {
-	binary.LittleEndian.PutUint16(b[len(b):len(b)+2], v)
-	return b[:len(b)+2]
+func puint16(w *internal.ErrWriter, v uint16) {
+	buf := make([]byte, 2)
+	binary.LittleEndian.PutUint16(buf[:], v)
+	w.Write(buf[:])
 }
 
-func puint32(b []byte, v ...uint32) []byte {
+func puint32(w *internal.ErrWriter, v ...uint32) {
+	buf := make([]byte, 4)
 	for _, vv := range v {
-		binary.LittleEndian.PutUint32(b[len(b):len(b)+4], vv)
-		b = b[:len(b)+4]
+		binary.LittleEndian.PutUint32(buf, vv)
+		w.Write(buf)
 	}
-	return b
 }
 
-func puint64(b []byte, v uint64) []byte {
-	binary.LittleEndian.PutUint64(b[len(b):len(b)+8], v)
-	return b[:len(b)+8]
+func puint64(w *internal.ErrWriter, v uint64) {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, v)
+	w.Write(buf)
 }
 
-func pbyte(b []byte, p []byte) []byte {
+func pbyte(w *internal.ErrWriter, p []byte) {
 	if len(p) > math.MaxUint16 {
 		panic(errLongString)
 	}
-	b = puint16(b, uint16(len(p)))
-	copy(b[len(b):len(b)+len(p)], p)
-	return b[:len(b)+len(p)]
+	puint16(w, uint16(len(p)))
+	w.Write(p)
 }
 
-func pqid(b []byte, qid ...Qid) []byte {
-	for _, q := range qid {
-		copy(b[len(b):len(b)+13], []byte(q[:13]))
-		b = b[:len(b)+13]
+func pqid(w *internal.ErrWriter, qids ...Qid) {
+	for _, q := range qids {
+		w.Write(q[:13])
 	}
-	return b
 }
 
-func pstring(b []byte, s ...string) []byte {
+func pstring(w *internal.ErrWriter, s ...string) {
 	for _, ss := range s {
-		b = pbyte(b, []byte(ss))
+		puint16(w, uint16(len(ss)))
+		io.WriteString(w, ss)
 	}
-	return b
 }
 
-func pheader(buf []byte, mtype uint8, tag uint16, extra ...uint32) []byte {
-	b := puint8(buf[:4], mtype)
-	b = puint16(b, tag)
-	b = puint32(b, extra...)
-	return b
-}
-
-func writelen(b []byte) []byte {
-	puint32(b[:0], uint32(len(b)))
-	return b
-}
-
-// Send writes the 9P protocol representation of the provided message
-// to w. An error is returned if there is a problem writing to w, or,
-// in the case of Twrite and Rread messages, reading from the message's
-// io.Reader.
-func Send(w io.Writer, m Msg) error {
-	if _, err := w.Write(m.bytes()); err != nil {
-		return err
-	}
-	if r, ok := m.(io.Reader); ok {
-		if _, err := io.Copy(w, r); err != nil {
-			return err
-		}
-	}
-	return nil
+func pheader(w *internal.ErrWriter, size uint32, mtype uint8, tag uint16, extra ...uint32) {
+	puint32(w, size)
+	puint8(w, mtype)
+	puint16(w, tag)
+	puint32(w, extra...)
 }
