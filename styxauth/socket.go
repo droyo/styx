@@ -78,7 +78,7 @@ func getpeereid(c *styx.Conn) (uid, gid string, err error) {
 		return "", "", err
 	}
 
-	uid := strconv.FormatUint(uint64(acct.Uid), 10)
-	gid := strconv.FormatUint(uint64(acct.Gid), 10)
+	uid = strconv.FormatUint(uint64(acct.Uid), 10)
+	gid = strconv.FormatUint(uint64(acct.Gid), 10)
 	return uid, gid, nil
 }
