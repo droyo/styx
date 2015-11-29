@@ -60,7 +60,7 @@ func lookupUid(name string) (string, error) {
 
 // Return the uid/gid of the other side of a unix connection.
 // This may have to be factored out into OS-specific syscalls.
-func getpeerid(c *styx.Conn) (uid, gid string, err error) {
+func getpeereid(c *styx.Conn) (uid, gid string, err error) {
 	conn := c.Conn()
 	sock, ok := conn.(*net.UnixConn)
 	if !ok {
