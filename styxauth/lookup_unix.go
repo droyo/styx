@@ -3,6 +3,8 @@ package styxauth
 /*
 #include <sys/types.h>
 #include <grp.h>
+#include <unistd.h>
+#include <stdlib.h>
 */
 import "C"
 import (
@@ -34,7 +36,7 @@ func lookupGid(name string) (string, error) {
 	nameC := C.CString(name)
 	defer C.free(unsafe.Pointer(nameC))
 
-	rv = C.getrnam_r(nameC, &grp, (*C.char)(buf), C.size_t(bufSize), &result)
+	rv = C.getgrnam_r(nameC, &grp, (*C.char)(buf), C.size_t(bufSize), &result)
 	if rv != 0 {
 		return "", fmt.Errorf("lookup group %s: %s", name, syscall.Errno(rv))
 	}
@@ -42,5 +44,5 @@ func lookupGid(name string) (string, error) {
 		return "", fmt.Errorf("unknown group %s", name)
 	}
 
-	return strconv.Itoa(int(grp.gr_id)), nil
+	return strconv.Itoa(int(grp.gr_gid)), nil
 }
