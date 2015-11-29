@@ -24,7 +24,7 @@ func All(auth ...styx.Auth) styx.Auth {
 
 func (stack stackAll) Auth(rw io.ReadWriter, c *styx.Conn, user, group, access string) error {
 	for _, auth := range stack {
-		err := auth(rw, c, user, group, access)
+		err := auth.Auth(rw, c, user, group, access)
 		if err != nil {
 			return err
 		}
@@ -42,7 +42,7 @@ func Any(auth ...styx.Auth) styx.Auth {
 
 func (stack stackAny) Auth(rw io.ReadWriter, c *styx.Conn, user, group, access string) error {
 	for _, auth := range stack {
-		err := auth(rw, c, user, group, access)
+		err := auth.Auth(rw, c, user, group, access)
 		if err == nil {
 			return nil
 		}
