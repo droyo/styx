@@ -17,10 +17,9 @@ import (
 // helper function to resolve a group name to gid
 func lookupGid(name string) (string, error) {
 	var (
-		bufSize C.long
-		rv      C.int
-		grp     C.struct_group
-		result  *C.struct_group
+		rv     C.int
+		grp    C.struct_group
+		result *C.struct_group
 	)
 
 	bufSize := C.sysconf(C._SC_GETGR_R_SIZE_MAX)
