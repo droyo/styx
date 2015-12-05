@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
-	"aqwari.net/net/styx/internal"
+	"aqwari.net/net/styx/internal/netutil"
+	"aqwari.net/net/styx/styxproto"
 )
 
 type dialee interface {
@@ -20,7 +22,7 @@ func (t *testLogger) Printf(format string, v ...interface{}) {
 	t.Logf(format, v...)
 }
 
-func sendTraffic(t *testing.T, ln *internal.PipeListener) {
+func sendTraffic(t *testing.T, ln *netutil.PipeListener) {
 	c, err := ln.Dial()
 	if err != nil {
 		t.Error(err)
@@ -31,7 +33,22 @@ func sendTraffic(t *testing.T, ln *internal.PipeListener) {
 		t.Error(err)
 		return
 	}
-	io.Copy(c, file)
+
+	go func() {
+		io.Copy(c, file)
+		time.Sleep(time.Second)
+		c.Close()
+	}()
+
+	d := styxproto.NewDecoder(c)
+	for d.Next() {
+		for _, msg := range d.Messages() {
+			t.Logf("→ %s", msg)
+		}
+	}
+	if d.Err() != nil {
+		t.Log(d.Err())
+	}
 }
 
 func TestServerBasic(t *testing.T) {
@@ -39,7 +56,7 @@ func TestServerBasic(t *testing.T) {
 		ErrorLog: (*testLogger)(t),
 		TraceLog: (*testLogger)(t),
 	}
-	var ln internal.PipeListener
+	var ln netutil.PipeListener
 	defer ln.Close()
 
 	go func() {

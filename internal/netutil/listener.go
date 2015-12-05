@@ -1,4 +1,6 @@
-package internal
+// Package netutil contains useful types for testing network
+// services.
+package netutil
 
 import (
 	"errors"
