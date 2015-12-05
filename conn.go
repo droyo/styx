@@ -90,7 +90,7 @@ func newConn(rwc io.ReadWriteCloser, srv *Server) *Conn {
 		session: make(map[uint32]*session),
 		bw:      newBufioWriter(rwc),
 		Decoder: newDecoder(rwc),
-		qidbuf:  make([]byte, 13),
+		qidbuf:  make([]byte, styxproto.QidLen*styxproto.MaxWElem),
 		statbuf: make([]byte, 512),
 	}
 }
