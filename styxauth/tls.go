@@ -16,7 +16,7 @@ var (
 // connection. The client must provide a valid certificate with a
 // common name that matches the username field in the authentication
 // request. For more control over cert-based authentication, use the
-// TLSAuth function.
+// TLSAuth type.
 var TLSSubjectCN = TLSAuth(checkSubjectCN)
 
 // TLSAuth returns a styx.Auth value that authenticates a user based
