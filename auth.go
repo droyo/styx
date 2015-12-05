@@ -20,5 +20,5 @@ import "io"
 //
 // Existing Auth implementations can be found in the styxauth package.
 type Auth interface {
-	Auth(rw io.ReadWriter, c *Conn, user, group, access string) error
+	Auth(rw io.ReadWriter, c *Conn, user, access string) error
 }

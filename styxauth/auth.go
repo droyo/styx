@@ -22,9 +22,9 @@ func All(auth ...styx.Auth) styx.Auth {
 	return stackAll(auth)
 }
 
-func (stack stackAll) Auth(rw io.ReadWriter, c *styx.Conn, user, group, access string) error {
+func (stack stackAll) Auth(rw io.ReadWriter, c *styx.Conn, user, access string) error {
 	for _, auth := range stack {
-		err := auth.Auth(rw, c, user, group, access)
+		err := auth.Auth(rw, c, user, access)
 		if err != nil {
 			return err
 		}
@@ -40,9 +40,9 @@ func Any(auth ...styx.Auth) styx.Auth {
 	return stackAny(auth)
 }
 
-func (stack stackAny) Auth(rw io.ReadWriter, c *styx.Conn, user, group, access string) error {
+func (stack stackAny) Auth(rw io.ReadWriter, c *styx.Conn, user, access string) error {
 	for _, auth := range stack {
-		err := auth.Auth(rw, c, user, group, access)
+		err := auth.Auth(rw, c, user, access)
 		if err == nil {
 			return nil
 		}
@@ -51,15 +51,15 @@ func (stack stackAny) Auth(rw io.ReadWriter, c *styx.Conn, user, group, access s
 }
 
 // The return value of Whitelist will authenticate users successfully
-// only if the tuple (user, group, access) is true in the rules map.
-func Whitelist(rules map[[3]string]bool) styx.Auth {
+// only if the tuple (user, access) is true in the rules map.
+func Whitelist(rules map[[2]string]bool) styx.Auth {
 	return allowMap(rules)
 }
 
-type allowMap map[[3]string]bool
+type allowMap map[[2]string]bool
 
-func (m allowMap) Auth(rw io.ReadWriter, c *styx.Conn, user, group, access string) error {
-	q := [3]string{"user", "group", "access"}
+func (m allowMap) Auth(rw io.ReadWriter, c *styx.Conn, user, access string) error {
+	q := [2]string{"user", "access"}
 	if m[q] {
 		return nil
 	}

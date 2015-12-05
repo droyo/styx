@@ -11,25 +11,23 @@ import (
 	"aqwari.net/net/styx"
 )
 
-// The SocketPeerID authentication method uses the underlying
-// transport to authenticate users. The underlying connection must
-// be a unix socket. The authentication method will obtain the
-// user and group of the connecting process, and compare it to the
-// user and group parameters in the authentication request.
-// Authentication fails if the user or group name does not match,
-// or the underlying transport is not a unix socket.
+// The SocketPeerID authentication method uses the underlying transport
+// to authenticate users. The underlying connection must be a unix
+// socket. The authentication method will obtain the user of the
+// connecting process, and compare it to the user parameter in the
+// authentication request.  Authentication fails if the user name does
+// not match, or the underlying transport is not a unix socket.
 var SocketPeerID authSocket
 
 type authSocket struct{}
 
 var (
-	errSocketUser  = errors.New("username of connecting process does not match request")
-	errSocketGroup = errors.New("group of connecting process does not match request")
-	errSocketConn  = errors.New("underlying connection is not a unix socket")
+	errSocketUser = errors.New("username of connecting process does not match request")
+	errSocketConn = errors.New("underlying connection is not a unix socket")
 )
 
-func (authSocket) Auth(_ io.ReadWriter, c *styx.Conn, user, group, _ string) error {
-	connUid, connGid, err := getpeereid(c)
+func (authSocket) Auth(_ io.ReadWriter, c *styx.Conn, user, _ string) error {
+	connUid, _, err := getpeereid(c)
 	if err != nil {
 		return errAuthFailure
 	}
@@ -37,12 +35,8 @@ func (authSocket) Auth(_ io.ReadWriter, c *styx.Conn, user, group, _ string) err
 	if err != nil {
 		return err
 	}
-	reqGid, err := lookupGid(group)
-	if err != nil {
-		return err
-	}
 
-	if connUid == reqUid && connGid == reqGid {
+	if connUid == reqUid {
 		return nil
 	}
 	return errAuthFailure
