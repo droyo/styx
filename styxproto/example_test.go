@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"strings"
 
 	"aqwari.net/net/styx/styxproto"
 )
@@ -53,8 +52,7 @@ func ExampleDecoder() {
 				log.Printf("Client wants version %s", msg.Version())
 				styxproto.WriteRversion(rwc, 8192, "9P2000")
 			case styxproto.Tread:
-				styxproto.WriteRread(rwc, msg.Tag(), 10,
-					strings.NewReader("data data data data"))
+				styxproto.WriteRread(rwc, msg.Tag(), []byte("data data"))
 			case styxproto.Twrite:
 				log.Printf("Receiving %d bytes from client", msg.Count())
 				io.Copy(ioutil.Discard, msg)
