@@ -6,9 +6,22 @@ import (
 	"runtime"
 	"strings"
 
-	"aqwari.net/net/styx/internal"
+	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 )
+
+func newQid(buf []byte, qtype uint8, version uint32, path uint64) styxproto.Qid {
+	if len(buf) < styxproto.QidLen {
+		buf = make([]byte, styxproto.QidLen)
+	}
+	q, _, err := styxproto.NewQid(buf, qtype, version, path)
+	if err != nil {
+		panic("styxproto.NewQid returned error despite sufficient buf size")
+	}
+	return q
+}
+
+var aqid = newQid(nil, styxproto.QTAUTH, 0, 0)
 
 func (c *Conn) serve() {
 	defer func() {
@@ -24,6 +37,7 @@ func (c *Conn) serve() {
 Loop:
 	for c.Next() {
 		for _, msg := range c.Messages() {
+			c.srv.debugf("← %s", msg)
 			if err := c.handleMessage(msg); err != nil {
 				break Loop
 			}
@@ -46,7 +60,8 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 		Rerror   = styxproto.WriteRerror
 		Rversion = styxproto.WriteRversion
 		Rflush   = styxproto.WriteRflush
-		w        = &internal.ErrWriter{W: c.bw}
+		Rauth    = styxproto.WriteRauth
+		w        = &util.ErrWriter{W: c.bw}
 	)
 
 	if m, ok := m.(styxproto.Tversion); ok {
@@ -69,13 +84,47 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 			c.state = stateActive
 		}
 	case styxproto.Tattach:
-		if m.Afid() != styxproto.NoFid {
-
-		} else {
+		var (
+			ok bool
+		)
+		if afid := m.Afid(); afid != styxproto.NoFid {
+			_, ok = c.getSession(afid)
+			if !ok {
+				Rerror(w, m.Tag(), "access denied")
+				break
+			}
+		} else if c.srv.Auth != nil {
+			// transport-based auth methods can authenticate
+			// Tattach requests as well. This lets users manage
+			// authentication without modifying their clients. We
+			// pass a dummy channel to the Auth callback.
+			var (
+				rw    = util.BlackHole{}
+				uname = string(m.Uname())
+				aname = string(m.Aname())
+			)
+			if err := c.srv.Auth.Auth(rw, c, uname, aname); err != nil {
+				Rerror(w, m.Tag(), "access denied: %s", err)
+				break
+			}
+		}
+		if _, inuse := c.getSession(m.Fid()); inuse {
+			Rerror(w, m.Tag(), "fid already in use")
+			break
 		}
 	case styxproto.Tauth:
-
+		if c.srv.Auth == nil {
+			Rerror(w, m.Tag(), "no auth required")
+			break
+		}
+		Rauth(w, m.Tag(), aqid)
 	case fcall:
+		fid := m.Fid()
+		_, ok := c.getSession(fid)
+		if !ok {
+			Rerror(w, m.Tag(), "unknown fid %d", m.Fid())
+			break
+		}
 	case styxproto.Tflush:
 		if cancel, ok := c.getPending(m.Oldtag()); ok {
 			cancel()

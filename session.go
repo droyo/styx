@@ -8,6 +8,6 @@ package styx
 // fid established in a Tattach request, the fid used in a T-message
 // is sufficient to identify the session.
 type session struct {
-	uname, gname, aname string
-	conn                *Conn
+	uname, aname string
+	conn         *Conn
 }

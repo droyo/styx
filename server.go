@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"aqwari.net/net/styx/internal"
+	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/retry"
 )
 
@@ -72,7 +72,7 @@ func (srv *Server) Serve(l net.Listener) error {
 	for {
 		rwc, err := l.Accept()
 		if err != nil {
-			if internal.IsTempErr(err) {
+			if util.IsTempErr(err) {
 				try++
 				srv.logf("9p: Accept error: %v; retrying in %v", err, backoff(try))
 				time.Sleep(backoff(try))
@@ -84,6 +84,7 @@ func (srv *Server) Serve(l net.Listener) error {
 		}
 		c := newConn(rwc, srv)
 		c.remoteAddr = rwc.RemoteAddr().String()
+		srv.debugf("accepeted connection from %s", rwc.RemoteAddr())
 		go c.serve()
 	}
 }

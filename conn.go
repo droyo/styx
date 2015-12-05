@@ -56,6 +56,26 @@ func (c *Conn) getSession(fid uint32) (*session, bool) {
 	return s, ok
 }
 
+type attach interface {
+	styxproto.Msg
+	Uname() []byte
+	Aname() []byte
+	Fid() uint32
+}
+
+func (c *Conn) newSession(msg attach) *session {
+	s := &session{
+		uname: string(msg.Uname()),
+		aname: string(msg.Aname()),
+		conn:  c,
+	}
+	fid := msg.Fid()
+	c.sessionLock.Lock()
+	c.session[fid] = s
+	c.sessionLock.Unlock()
+	return s
+}
+
 type connState int
 
 const (
