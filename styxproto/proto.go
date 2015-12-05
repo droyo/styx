@@ -8,7 +8,7 @@ import (
 	"math"
 	"strings"
 
-	"aqwari.net/net/styx/internal"
+	"aqwari.net/net/styx/internal/util"
 )
 
 var (
@@ -97,7 +97,7 @@ func WriteTversion(w io.Writer, msize uint32, version string) (int, error) {
 		return 0, errLongVersion
 	}
 	size := uint32(minSizeLUT[msgTversion] + len(version))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTversion, NoTag, msize)
 	pstring(ew, version)
 	return ew.N, ew.Err
@@ -140,7 +140,7 @@ func WriteRversion(w io.Writer, msize uint32, version string) (int, error) {
 		return 0, errLongVersion
 	}
 	size := uint32(minSizeLUT[msgRversion] + len(version))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRversion, NoTag, msize)
 	pstring(ew, version)
 	return ew.N, ew.Err
@@ -183,7 +183,7 @@ func WriteTauth(w io.Writer, tag uint16, afid uint32, uname, aname string) (int,
 		return 0, errLongAname
 	}
 	size := uint32(minSizeLUT[msgTauth] + len(uname) + len(aname))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTauth, tag, afid)
 	pstring(ew, uname, aname)
 	return ew.N, ew.Err
@@ -210,7 +210,7 @@ func (m Rauth) String() string { return fmt.Sprintf("Rauth aqid=%q", m.Aqid()) }
 // WriteRauth writes a new Rauth message to w.
 func WriteRauth(w io.Writer, tag uint16, qid Qid) (int, error) {
 	size := uint32(maxSizeLUT[msgRauth])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRauth, tag)
 	pqid(ew, qid)
 	return ew.N, ew.Err
@@ -250,7 +250,7 @@ func WriteTattach(w io.Writer, tag uint16, fid, afid uint32, uname, aname string
 		return 0, errLongAname
 	}
 	size := uint32(minSizeLUT[msgTattach] + len(uname) + len(aname))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTattach, tag, fid, afid)
 	pstring(ew, uname, aname)
 	return ew.N, ew.Err
@@ -279,7 +279,7 @@ func (m Rattach) Qid() Qid { return Qid(m[7:20]) }
 // WriteRattach writes a new Rattach message to w.
 func WriteRattach(w io.Writer, tag uint16, qid Qid) (int, error) {
 	size := uint32(maxSizeLUT[msgRattach])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRattach, tag)
 	pqid(ew, qid)
 	return ew.N, ew.Err
@@ -315,7 +315,7 @@ func WriteRerror(w io.Writer, tag uint16, errfmt string, v ...interface{}) (int,
 		ename = ename[:MaxErrorLen]
 	}
 	size := uint32(minSizeLUT[msgRerror] + len(ename))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 
 	pheader(ew, size, msgRerror, tag)
 	pstring(ew, ename)
@@ -341,7 +341,7 @@ func (m Tflush) Oldtag() uint16 { return guint16(m[7:9]) }
 // WriteTflush writes a new Tflush message to w.
 func WriteTflush(w io.Writer, tag, oldtag uint16) (int, error) {
 	size := uint32(maxSizeLUT[msgTflush])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTflush, tag)
 	puint16(ew, oldtag)
 	return ew.N, ew.Err
@@ -365,7 +365,7 @@ func (m Rflush) bytes() []byte { return m }
 // WriteRflush writes a new Rflush message to w.
 func WriteRflush(w io.Writer, tag uint16) (int, error) {
 	size := uint32(maxSizeLUT[msgRflush])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRflush, tag)
 	return ew.N, ew.Err
 }
@@ -416,7 +416,7 @@ func WriteTwalk(w io.Writer, tag uint16, fid, newfid uint32, wname ...string) (i
 		size += 2
 		size += uint32(len(v))
 	}
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTwalk, tag, fid, newfid)
 	puint16(ew, uint16(len(wname)))
 	pstring(ew, wname...)
@@ -462,7 +462,7 @@ func WriteRwalk(w io.Writer, tag uint16, wqid ...Qid) (int, error) {
 		return 0, errMaxWElem
 	}
 	size := uint32(minSizeLUT[msgRwalk] + 13*len(wqid))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRwalk, tag)
 	puint16(ew, uint16(len(wqid)))
 	pqid(ew, wqid...)
@@ -518,7 +518,7 @@ func (m Topen) Mode() uint8 { return uint8(m[11]) }
 // NewTopen writes a new Topen message to w.
 func WriteTopen(w io.Writer, tag uint16, fid uint32, mode uint8) (int, error) {
 	size := uint32(maxSizeLUT[msgTopen])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTopen, tag, fid)
 	puint8(ew, mode)
 
@@ -552,7 +552,7 @@ func (m Ropen) IOunit() int64 { return int64(guint32(m[20:24])) }
 // WriteRopen writes a new Ropen message to w.
 func WriteRopen(w io.Writer, tag uint16, qid Qid, iounit uint32) (int, error) {
 	size := uint32(maxSizeLUT[msgRopen])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRopen, tag)
 	pqid(ew, qid)
 	puint32(ew, iounit)
@@ -585,7 +585,7 @@ func WriteTcreate(w io.Writer, tag uint16, fid uint32, name string, perm uint32,
 		return 0, errLongFilename
 	}
 	size := uint32(minSizeLUT[msgTcreate] + len(name))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTcreate, tag, fid)
 	pstring(ew, name)
 	puint32(ew, perm)
@@ -611,7 +611,7 @@ func (m Rcreate) IOunit() int64 { return int64(guint32(m[20:24])) }
 // WriteRcreate writes a new Rcreate message to w.
 func WriteRcreate(w io.Writer, tag uint16, qid Qid, iounit uint32) (int, error) {
 	size := uint32(maxSizeLUT[msgRcreate])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRcreate, tag)
 	pqid(ew, qid)
 	puint32(ew, iounit)
@@ -649,7 +649,7 @@ func WriteTread(w io.Writer, tag uint16, fid uint32, offset, count int64) (int, 
 		return 0, errMaxCount
 	}
 	size := uint32(maxSizeLUT[msgTread])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTread, tag, fid)
 	puint64(ew, uint64(offset))
 	puint32(ew, uint32(count))
@@ -684,7 +684,7 @@ func WriteRread(w io.Writer, tag uint16, data []byte) (int, error) {
 		return 0, errTooBig
 	}
 	size := uint32(minSizeLUT[msgRread]) + uint32(len(data))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRread, tag, uint32(len(data)))
 	ew.Write(data)
 	return ew.N, ew.Err
@@ -715,7 +715,7 @@ func WriteTwrite(w io.Writer, tag uint16, fid uint32, offset int64, data []byte)
 		return 0, errTooBig
 	}
 	size := uint32(minSizeLUT[msgTwrite]) + uint32(len(data))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTwrite, tag, fid)
 	puint64(ew, uint64(offset))
 	puint32(ew, uint32(len(data)))
@@ -744,7 +744,7 @@ func WriteRwrite(w io.Writer, tag uint16, count int64) (int, error) {
 		return 0, errMaxCount
 	}
 	size := uint32(maxSizeLUT[msgRwrite])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRwrite, tag, uint32(count))
 
 	return ew.N, ew.Err
@@ -767,7 +767,7 @@ func (m Tclunk) Fid() uint32   { return guint32(m[7:11]) }
 // WriteTclunk writes a Tclunk message to w.
 func WriteTclunk(w io.Writer, tag uint16, fid uint32) (int, error) {
 	size := uint32(maxSizeLUT[msgTclunk])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTclunk, tag, fid)
 	return ew.N, ew.Err
 }
@@ -783,7 +783,7 @@ func (m Rclunk) bytes() []byte { return m }
 // WriteRclunk writes an Rclunk message to w.
 func WriteRclunk(w io.Writer, tag uint16) (int, error) {
 	size := uint32(maxSizeLUT[msgRclunk])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRclunk, tag)
 	return ew.N, ew.Err
 }
@@ -800,7 +800,7 @@ func (m Tremove) Fid() uint32   { return guint32(m[7:11]) }
 // WriteTremove writes a Tremove message to w.
 func WriteTremove(w io.Writer, tag uint16, fid uint32) (int, error) {
 	size := uint32(maxSizeLUT[msgTremove])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTremove, tag, fid)
 	return ew.N, ew.Err
 }
@@ -816,7 +816,7 @@ func (m Rremove) bytes() []byte { return m }
 // WriteRremove writes an Rremove message to w.
 func WriteRremove(w io.Writer, tag uint16) (int, error) {
 	size := uint32(maxSizeLUT[msgRremove])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRremove, tag)
 	return ew.N, ew.Err
 }
@@ -833,7 +833,7 @@ func (m Tstat) Fid() uint32   { return guint32(m[7:11]) }
 // WriteTstat writes a Tstat message to w.
 func WriteTstat(w io.Writer, tag uint16, fid uint32) (int, error) {
 	size := uint32(maxSizeLUT[msgTstat])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTstat, tag, fid)
 	return ew.N, ew.Err
 }
@@ -856,7 +856,7 @@ func WriteRstat(w io.Writer, tag uint16, stat Stat) (int, error) {
 		return 0, errShortStat
 	}
 	size := uint32((minSizeLUT[msgRstat] - minStatLen) + len(stat))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRstat, tag)
 	pbyte(ew, stat)
 
@@ -882,7 +882,7 @@ func WriteTwstat(w io.Writer, tag uint16, fid uint32, stat Stat) (int, error) {
 		return 0, errShortStat
 	}
 	size := uint32(minSizeLUT[msgTwstat] + len(stat))
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgTwstat, tag)
 	pbyte(ew, stat)
 	return ew.N, ew.Err
@@ -899,7 +899,7 @@ func (m Rwstat) bytes() []byte { return m }
 // WriteRwstat writes an Rwstat message to w.
 func WriteRwstat(w io.Writer, tag uint16) (int, error) {
 	size := uint32(maxSizeLUT[msgRwstat])
-	ew := &internal.ErrWriter{W: w}
+	ew := &util.ErrWriter{W: w}
 	pheader(ew, size, msgRwstat, tag)
 	return ew.N, ew.Err
 }
