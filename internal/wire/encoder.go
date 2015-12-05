@@ -67,7 +67,10 @@ func (w *RreadPipe) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
-var errOffsetOverflow = errors.New("write past max int64 in file")
+var (
+	errOffsetOverflow = errors.New("write past max int64 in file")
+	errTagFull        = errors.New("no free tags (too many pending requests)")
+)
 
 // Write writes Twrite messages to w's underlying TxWriter. If len(p)
 // is greater than the maximum message size, multiple Rread messages
@@ -83,6 +86,10 @@ func (w *TwritePipe) Write(p []byte) (n int, err error) {
 		upto := w.Msize
 		if i < w.Msize {
 			upto = i
+		}
+		tag, ok := w.Tag.Get()
+		if !ok {
+			return n, errTagFull
 		}
 		tx := w.W.Tx()
 		_, err := wr(tx, tag, w.Fid, w.Offset+w.n, p[:upto])
