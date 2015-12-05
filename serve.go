@@ -61,6 +61,7 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 		Rversion = styxproto.WriteRversion
 		Rflush   = styxproto.WriteRflush
 		Rauth    = styxproto.WriteRauth
+		Rattach  = styxproto.WriteRattach
 		w        = &util.ErrWriter{W: c.bw}
 	)
 
@@ -76,23 +77,27 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 
 	switch m := m.(type) {
 	case styxproto.Tversion:
-		if !bytes.HasPrefix(m.Version(), []byte("9P2000")) {
-			Rerror(w, m.Tag(), "invalid version %s", m.Version())
+		msize := c.srv.MaxSize
+		if n := m.Msize(); n < msize {
+			msize = n
+		}
+		if ver := m.Version(); !bytes.HasPrefix(ver, []byte("9P2000")) {
+			c.srv.logf("received unknown version %s from %s", ver, c.remoteAddr)
+			Rversion(w, uint32(msize), "unknown")
 			break
 		} else {
 			Rversion(w, uint32(c.srv.MaxSize), "9P2000")
 			c.state = stateActive
 		}
 	case styxproto.Tattach:
-		var (
-			ok bool
-		)
+		rootQid := newQid(c.qidbuf, styxproto.QTDIR, 0, util.Hash64(m.Aname()))
 		if afid := m.Afid(); afid != styxproto.NoFid {
-			_, ok = c.getSession(afid)
+			_, ok := c.getSession(afid)
 			if !ok {
-				Rerror(w, m.Tag(), "access denied")
+				Rerror(w, m.Tag(), "authentication failed")
 				break
 			}
+			Rattach(w, m.Tag(), rootQid)
 		} else if c.srv.Auth != nil {
 			// transport-based auth methods can authenticate
 			// Tattach requests as well. This lets users manage
@@ -104,13 +109,16 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 				aname = string(m.Aname())
 			)
 			if err := c.srv.Auth.Auth(rw, c, uname, aname); err != nil {
-				Rerror(w, m.Tag(), "access denied: %s", err)
+				Rerror(w, m.Tag(), "auth required", err)
 				break
 			}
-		}
-		if _, inuse := c.getSession(m.Fid()); inuse {
-			Rerror(w, m.Tag(), "fid already in use")
-			break
+		} else {
+			if _, inuse := c.getSession(m.Fid()); inuse {
+				Rerror(w, m.Tag(), "fid already in use")
+				break
+			}
+			c.newSession(m)
+			Rattach(w, m.Tag(), rootQid)
 		}
 	case styxproto.Tauth:
 		if c.srv.Auth == nil {
