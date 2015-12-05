@@ -3,7 +3,6 @@ package styxproto
 import (
 	"bytes"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -58,8 +57,8 @@ func TestEncode(t *testing.T) {
 	encode(WriteTcreate(&buf, 1, 4, "frogs.txt", 0755, 3))
 	encode(WriteRcreate(&buf, 1, qid, 1200))
 	encode(WriteTread(&buf, 0, 32, 803280, 5308))
-	encode(WriteRread(&buf, 16, 8, strings.NewReader("hello, world!")))
-	encode(WriteTwrite(&buf, 1, 4, 10, 0, strings.NewReader("goodbye, world!")))
+	encode(WriteRread(&buf, 16, []byte("hello, world!")))
+	encode(WriteTwrite(&buf, 1, 4, 10, []byte("goodbye, world!")))
 	encode(WriteRwrite(&buf, 1, 0))
 	encode(WriteTclunk(&buf, 5, 4))
 	encode(WriteRclunk(&buf, 5))

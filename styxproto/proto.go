@@ -677,16 +677,16 @@ func (m Rread) nbytes() int64 { return m.msg.nbytes() }
 func (m Rread) bytes() []byte { return m.msg[:11] }
 func (m Rread) Count() int64  { return int64(guint32(m.msg[7:11])) }
 
-// WriteRread writes a new Rread message to w.  An error is returned if
-// count exceeds the maximum size of a 9P message.
-func WriteRread(w io.Writer, tag uint16, count int64, data io.Reader) (int, error) {
-	if math.MaxUint32-int64(minSizeLUT[msgRread]) < count {
+// WriteRread writes a new Rread message to w. An error is returned
+// if the message cannot fit inside a single 9P message.
+func WriteRread(w io.Writer, tag uint16, data []byte) (int, error) {
+	if math.MaxUint32-minSizeLUT[msgTwrite] < len(data) {
 		return 0, errTooBig
 	}
-	size := uint32(minSizeLUT[msgRread]) + uint32(count)
+	size := uint32(minSizeLUT[msgRread]) + uint32(len(data))
 	ew := &internal.ErrWriter{W: w}
-	pheader(ew, size, msgRread, tag, uint32(count))
-	io.CopyN(ew, data, count)
+	pheader(ew, size, msgRread, tag, uint32(len(data)))
+	ew.Write(data)
 	return ew.N, ew.Err
 }
 
@@ -710,16 +710,16 @@ func (m Twrite) Count() int64  { return Tread(m.msg).Count() }
 
 // WriteTwrite writes a Twrite message to w. An error is returned
 // if the message cannot fit inside a single 9P message.
-func WriteTwrite(w io.Writer, tag uint16, fid uint32, offset, count int64, data io.Reader) (int, error) {
-	if math.MaxUint32-int64(minSizeLUT[msgTwrite]) < count {
+func WriteTwrite(w io.Writer, tag uint16, fid uint32, offset int64, data []byte) (int, error) {
+	if math.MaxUint32-minSizeLUT[msgTwrite] < len(data) {
 		return 0, errTooBig
 	}
-	size := uint32(minSizeLUT[msgTwrite]) + uint32(count)
+	size := uint32(minSizeLUT[msgTwrite]) + uint32(len(data))
 	ew := &internal.ErrWriter{W: w}
 	pheader(ew, size, msgTwrite, tag, fid)
 	puint64(ew, uint64(offset))
-	puint32(ew, uint32(count))
-	io.CopyN(ew, data, count)
+	puint32(ew, uint32(len(data)))
+	ew.Write(data)
 	return ew.N, ew.Err
 }
 
