@@ -1,4 +1,4 @@
-package internal
+package util
 
 // IsTempErr returns true if an error exports a
 // Temporary() method that returns true.
