@@ -45,7 +45,7 @@ func TestEncode(t *testing.T) {
 	encode(WriteRversion(&buf, 1<<11, "9P2000"))
 	encode(WriteTauth(&buf, 1, 1, "gopher", ""))
 	encode(WriteRauth(&buf, 1, qid))
-	encode(WriteTattach(&buf, 2, 2, 1, "gopher", ""))
+	encode(WriteTattach(&buf, 2, 2, 31415, "gopher", ""))
 	encode(WriteRattach(&buf, 2, qid))
 	encode(WriteRerror(&buf, 0, "some error"))
 	encode(WriteTflush(&buf, 3, 2))
