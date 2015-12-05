@@ -33,6 +33,9 @@ const (
 	msgRwstat                // size[4] Rwstat tag[2]
 )
 
+// QidLen is the length of a Qid in bytes.
+const QidLen = 13
+
 // NoTag is the tag for Tversion and Rversion requests.
 const NoTag = ^uint16(0)
 
