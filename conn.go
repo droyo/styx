@@ -15,6 +15,7 @@ import (
 // connection.
 type Conn struct {
 	*styxproto.Decoder
+	*styxproto.Encoder
 	bw         *bufio.Writer
 	rwc        io.ReadWriteCloser
 	srv        *Server
@@ -93,12 +94,14 @@ const (
 )
 
 func newConn(rwc io.ReadWriteCloser, srv *Server) *Conn {
+	bw := newBufioWriter(rwc)
 	return &Conn{
 		rwc:     rwc,
 		srv:     srv,
 		session: make(map[uint32]*session),
-		bw:      newBufioWriter(rwc),
+		bw:      bw,
 		Decoder: newDecoder(rwc),
+		Encoder: styxproto.NewEncoder(bw),
 		qidbuf:  make([]byte, styxproto.QidLen*styxproto.MaxWElem),
 		statbuf: make([]byte, 512),
 	}

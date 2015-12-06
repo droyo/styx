@@ -50,28 +50,19 @@ Loop:
 	if err := c.bw.Flush(); err != nil {
 		c.srv.logf("error flushing message buffer: %v", err)
 	}
-	if c.Err() != nil {
-		c.srv.logf("error parsing messages: %v", c.Err())
+	if c.Decoder.Err() != nil {
+		c.srv.logf("error parsing messages: %v", c.Decoder.Err())
 	}
 }
 
 func (c *Conn) handleMessage(m styxproto.Msg) error {
-	var (
-		Rerror   = styxproto.WriteRerror
-		Rversion = styxproto.WriteRversion
-		Rflush   = styxproto.WriteRflush
-		Rauth    = styxproto.WriteRauth
-		Rattach  = styxproto.WriteRattach
-		w        = &util.ErrWriter{W: c.bw}
-	)
-
 	if m, ok := m.(styxproto.Tversion); ok {
 		if c.state != stateNew {
-			Rerror(w, m.Tag(), "late Tversion message")
+			c.Rerror(m.Tag(), "late Tversion message")
 			return nil
 		}
 	} else if c.state == stateNew {
-		Rerror(w, m.Tag(), "protocol version not negotiated")
+		c.Rerror(m.Tag(), "protocol version not negotiated")
 		return nil
 	}
 
@@ -83,10 +74,10 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 		}
 		if ver := m.Version(); !bytes.HasPrefix(ver, []byte("9P2000")) {
 			c.srv.logf("received unknown version %s from %s", ver, c.remoteAddr)
-			Rversion(w, uint32(msize), "unknown")
+			c.Rversion(uint32(msize), "unknown")
 			break
 		} else {
-			Rversion(w, uint32(c.srv.MaxSize), "9P2000")
+			c.Rversion(uint32(c.srv.MaxSize), "9P2000")
 			c.state = stateActive
 		}
 	case styxproto.Tattach:
@@ -94,10 +85,10 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 		if afid := m.Afid(); afid != styxproto.NoFid {
 			_, ok := c.getSession(afid)
 			if !ok {
-				Rerror(w, m.Tag(), "authentication failed")
+				c.Rerror(m.Tag(), "authentication failed")
 				break
 			}
-			Rattach(w, m.Tag(), rootQid)
+			c.Rattach(m.Tag(), rootQid)
 		} else if c.srv.Auth != nil {
 			// transport-based auth methods can authenticate
 			// Tattach requests as well. This lets users manage
@@ -109,45 +100,45 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 				aname = string(m.Aname())
 			)
 			if err := c.srv.Auth.Auth(rw, c, uname, aname); err != nil {
-				Rerror(w, m.Tag(), "auth required", err)
+				c.Rerror(m.Tag(), "auth required", err)
 				break
 			}
 			c.newSession(m)
-			Rattach(w, m.Tag(), rootQid)
+			c.Rattach(m.Tag(), rootQid)
 		} else {
 			if _, inuse := c.getSession(m.Fid()); inuse {
-				Rerror(w, m.Tag(), "fid already in use")
+				c.Rerror(m.Tag(), "fid already in use")
 				break
 			}
 			c.newSession(m)
-			Rattach(w, m.Tag(), rootQid)
+			c.Rattach(m.Tag(), rootQid)
 		}
 	case styxproto.Tauth:
 		if c.srv.Auth == nil {
-			Rerror(w, m.Tag(), "no auth required")
+			c.Rerror(m.Tag(), "no auth required")
 			break
 		}
-		Rauth(w, m.Tag(), aqid)
+		c.Rauth(m.Tag(), aqid)
 	case fcall:
 		fid := m.Fid()
 		_, ok := c.getSession(fid)
 		if !ok {
-			Rerror(w, m.Tag(), "unknown fid %d", m.Fid())
+			c.Rerror(m.Tag(), "unknown fid %d", m.Fid())
 			break
 		}
 	case styxproto.Tflush:
 		if cancel, ok := c.getPending(m.Oldtag()); ok {
 			cancel()
 		}
-		Rflush(w, m.Tag())
+		c.Rflush(m.Tag())
 	case styxproto.BadMessage:
 		c.srv.logf("received bad message: %v", m.Err)
-		Rerror(w, m.Tag(), "malformed message")
+		c.Rerror(m.Tag(), "malformed message")
 		break
 	default:
 		name := fmt.Sprintf("%T", m)
 		name = name[strings.IndexByte(name, '.')+1:]
-		Rerror(w, m.Tag(), "unexpected %s message", name)
+		c.Rerror(m.Tag(), "unexpected %s message", name)
 	}
-	return w.Err
+	return c.Encoder.Err()
 }
