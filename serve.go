@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
@@ -52,6 +53,19 @@ Loop:
 	}
 	if c.Decoder.Err() != nil {
 		c.srv.logf("error parsing messages: %v", c.Decoder.Err())
+	}
+}
+
+// runs in its own goroutine. creates a session on succesful
+// authentication.
+func (c *conn) authenticate(afid uint32, user, access string) {
+	// Without a timeout this goroutine could hang around
+	// forever.
+	const timeout = time.Second * 10
+	deadline := time.NewTimer(timeout)
+	select {
+	case <-deadline.C:
+		return
 	}
 }
 
@@ -118,6 +132,7 @@ func (c *conn) handleMessage(m styxproto.Msg) error {
 			c.Rerror(m.Tag(), "no auth required")
 			break
 		}
+		go c.authenticate(m.Afid(), string(m.Uname()), string(m.Aname()))
 		c.Rauth(m.Tag(), aqid)
 	case fcall:
 		fid := m.Fid()
