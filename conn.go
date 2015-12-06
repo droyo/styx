@@ -2,6 +2,7 @@ package styx
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"sync"
 
@@ -13,7 +14,7 @@ import (
 // A Conn represents the server-side of a 9P connection.
 // Multiple sessions may be multiplexed over a single
 // connection.
-type Conn struct {
+type conn struct {
 	*styxproto.Decoder
 	*styxproto.Encoder
 	bw         *bufio.Writer
@@ -31,17 +32,44 @@ type Conn struct {
 	pending     map[uint16]context.CancelFunc
 }
 
+func (c *conn) channel() channel {
+	return channel{c: c}
+}
+
+// A Channel is a bidirectional communication channel between
+// the server and client, that is implemented using read/write
+// operations.
+type channel struct {
+	rw io.ReadWriter
+	c  *conn
+}
+
+// Read reads any Twrite messages incoming from the client.
+func (ch channel) Read(p []byte) (int, error) {
+	return 0, errors.New("todo")
+}
+
+// Write sends Rread responses to the client.
+func (ch channel) Write(p []byte) (int, error) {
+	return 0, errors.New("todo")
+}
+
+// Transport returns the underlying connection.
+func (ch channel) Transport() interface{} {
+	return ch.c.rwc
+}
+
 // Conn returns the underlying connection used by a Conn.
 // It can be accessed to implement transport-based authentication
 // methods. The return value of Conn must never be read from,
 // written to, or closed.
-func (c *Conn) Conn() interface{} {
+func (c *conn) conn() interface{} {
 	return c.rwc
 }
 
 // getPending retrieves a CancelFunc for a pending operation.
 // ok is true only if the cancelFunc could be retrieved.
-func (c *Conn) getPending(tag uint16) (cancel context.CancelFunc, ok bool) {
+func (c *conn) getPending(tag uint16) (cancel context.CancelFunc, ok bool) {
 	c.pendingLock.RLock()
 	cancel, ok = c.pending[tag]
 	c.pendingLock.RUnlock()
@@ -50,7 +78,7 @@ func (c *Conn) getPending(tag uint16) (cancel context.CancelFunc, ok bool) {
 
 // getSession retrieves the session associated with fid. The returned
 // session is non-nil only if the second return parameter is true.
-func (c *Conn) getSession(fid uint32) (*session, bool) {
+func (c *conn) getSession(fid uint32) (*session, bool) {
 	c.sessionLock.RLock()
 	s, ok := c.session[fid]
 	c.sessionLock.RUnlock()
@@ -65,7 +93,7 @@ type attach interface {
 	Afid() uint32
 }
 
-func (c *Conn) newSession(msg attach) *session {
+func (c *conn) newSession(msg attach) *session {
 	s := &session{
 		uname: string(msg.Uname()),
 		aname: string(msg.Aname()),
@@ -93,9 +121,9 @@ const (
 	stateActive                  // Version negotiated, ready to serve requests
 )
 
-func newConn(rwc io.ReadWriteCloser, srv *Server) *Conn {
+func newConn(rwc io.ReadWriteCloser, srv *Server) *conn {
 	bw := newBufioWriter(rwc)
-	return &Conn{
+	return &conn{
 		rwc:     rwc,
 		srv:     srv,
 		session: make(map[uint32]*session),
@@ -107,7 +135,7 @@ func newConn(rwc io.ReadWriteCloser, srv *Server) *Conn {
 	}
 }
 
-func (c *Conn) close() error {
+func (c *conn) close() error {
 	putDecoder(c.Decoder)
 	putBufioWriter(c.bw)
 	return c.rwc.Close()

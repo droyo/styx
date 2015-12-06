@@ -3,7 +3,6 @@ package styxauth
 import (
 	"crypto/tls"
 	"errors"
-	"io"
 
 	"aqwari.net/net/styx"
 )
@@ -26,8 +25,8 @@ var TLSSubjectCN = TLSAuth(checkSubjectCN)
 // authentication succeeds, and a non-nil error otherwise.
 type TLSAuth func(user, access string, state tls.ConnectionState) error
 
-func (fn TLSAuth) Auth(_ io.ReadWriter, c *styx.Conn, user, access string) error {
-	if tlsconn, ok := c.Conn().(*tls.Conn); ok {
+func (fn TLSAuth) Auth(rw styx.Channel, user, access string) error {
+	if tlsconn, ok := rw.Transport().(*tls.Conn); ok {
 		return fn(user, access, tlsconn.ConnectionState())
 	}
 	return errTLSConn

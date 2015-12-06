@@ -2,7 +2,6 @@ package styxauth
 
 import (
 	"errors"
-	"io"
 
 	"aqwari.net/net/styx"
 )
@@ -22,9 +21,9 @@ func All(auth ...styx.Auth) styx.Auth {
 	return stackAll(auth)
 }
 
-func (stack stackAll) Auth(rw io.ReadWriter, c *styx.Conn, user, access string) error {
+func (stack stackAll) Auth(rw styx.Channel, user, access string) error {
 	for _, auth := range stack {
-		err := auth.Auth(rw, c, user, access)
+		err := auth.Auth(rw, user, access)
 		if err != nil {
 			return err
 		}
@@ -40,9 +39,9 @@ func Any(auth ...styx.Auth) styx.Auth {
 	return stackAny(auth)
 }
 
-func (stack stackAny) Auth(rw io.ReadWriter, c *styx.Conn, user, access string) error {
+func (stack stackAny) Auth(rw styx.Channel, user, access string) error {
 	for _, auth := range stack {
-		err := auth.Auth(rw, c, user, access)
+		err := auth.Auth(rw, user, access)
 		if err == nil {
 			return nil
 		}
@@ -58,7 +57,7 @@ func Whitelist(rules map[[2]string]bool) styx.Auth {
 
 type allowMap map[[2]string]bool
 
-func (m allowMap) Auth(rw io.ReadWriter, c *styx.Conn, user, access string) error {
+func (m allowMap) Auth(rw styx.Channel, user, access string) error {
 	q := [2]string{"user", "access"}
 	if m[q] {
 		return nil

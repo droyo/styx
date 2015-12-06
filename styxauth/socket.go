@@ -4,7 +4,6 @@ package styxauth
 
 import (
 	"errors"
-	"io"
 	"net"
 	"os/user"
 	"strconv"
@@ -28,8 +27,8 @@ var (
 	errSocketConn = errors.New("underlying connection is not a unix socket")
 )
 
-func (authSocket) Auth(_ io.ReadWriter, c *styx.Conn, user, _ string) error {
-	connUid, _, err := getpeereid(c)
+func (authSocket) Auth(rw styx.Channel, user, _ string) error {
+	connUid, _, err := getpeereid(rw.Transport())
 	if err != nil {
 		return errAuthFailure
 	}
@@ -56,8 +55,7 @@ func lookupUid(name string) (string, error) {
 
 // Return the uid/gid of the other side of a unix connection.
 // This may have to be factored out into OS-specific syscalls.
-func getpeereid(c *styx.Conn) (uid, gid string, err error) {
-	conn := c.Conn()
+func getpeereid(conn interface{}) (uid, gid string, err error) {
 	sock, ok := conn.(*net.UnixConn)
 	if !ok {
 		return "", "", errSocketConn

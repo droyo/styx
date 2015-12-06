@@ -23,7 +23,7 @@ func newQid(buf []byte, qtype uint8, version uint32, path uint64) styxproto.Qid 
 
 var aqid = newQid(nil, styxproto.QTAUTH, 0, 0)
 
-func (c *Conn) serve() {
+func (c *conn) serve() {
 	defer func() {
 		if err := recover(); err != nil {
 			const size = 64 << 10
@@ -55,7 +55,7 @@ Loop:
 	}
 }
 
-func (c *Conn) handleMessage(m styxproto.Msg) error {
+func (c *conn) handleMessage(m styxproto.Msg) error {
 	if m, ok := m.(styxproto.Tversion); ok {
 		if c.state != stateNew {
 			c.Rerror(m.Tag(), "late Tversion message")
@@ -99,7 +99,7 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 				uname = string(m.Uname())
 				aname = string(m.Aname())
 			)
-			if err := c.srv.Auth.Auth(rw, c, uname, aname); err != nil {
+			if err := c.srv.Auth.Auth(channel{c: c, rw: rw}, uname, aname); err != nil {
 				c.Rerror(m.Tag(), "auth required", err)
 				break
 			}

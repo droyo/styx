@@ -9,5 +9,5 @@ package styx
 // is sufficient to identify the session.
 type session struct {
 	uname, aname string
-	conn         *Conn
+	conn         *conn
 }
