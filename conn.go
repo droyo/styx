@@ -61,6 +61,7 @@ type attach interface {
 	Uname() []byte
 	Aname() []byte
 	Fid() uint32
+	Afid() uint32
 }
 
 func (c *Conn) newSession(msg attach) *session {
@@ -70,9 +71,17 @@ func (c *Conn) newSession(msg attach) *session {
 		conn:  c,
 	}
 	fid := msg.Fid()
+
 	c.sessionLock.Lock()
 	c.session[fid] = s
 	c.sessionLock.Unlock()
+
+	if afid := msg.Afid(); afid != styxproto.NoFid {
+		c.sessionLock.Lock()
+		c.session[afid] = s
+		c.sessionLock.Unlock()
+	}
+
 	return s
 }
 
