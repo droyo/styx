@@ -112,6 +112,8 @@ func (c *Conn) handleMessage(m styxproto.Msg) error {
 				Rerror(w, m.Tag(), "auth required", err)
 				break
 			}
+			c.newSession(m)
+			Rattach(w, m.Tag(), rootQid)
 		} else {
 			if _, inuse := c.getSession(m.Fid()); inuse {
 				Rerror(w, m.Tag(), "fid already in use")
