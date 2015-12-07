@@ -1,0 +1,136 @@
+There are things I want to change, but I want to focus on getting
+something that works first. So I keep those things here.
+
+- styx.Conn should be private as it is now. I am thinking we change
+  the styx.Auth interface from
+  
+	Auth(rw io.ReadWriter, c *Conn, user, tree string)
+
+to
+
+	Auth(rw *Channel, user, tree string)
+
+with Channel (name TBD) being an io.ReadWriter that can also
+be used to get at the underlying connection for transport-based
+authentication.
+
+API notes
+
+If we mimic the net/http API, we have something like this:
+
+	type srv struct {
+		data []byte
+	}
+	
+	func (s *srv) Serve9P(w styx.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case styx.Stat:
+		case styx.Read:
+		case styx.Write:
+		}
+	}
+
+
+// An RreadPipe implements io.Writer. It encodes written data
+// to 9P Rread messages and writes them to an underlying writer.
+type RreadPipe struct {
+	// The underlying Writer.
+	W *TxWriter
+
+	// The maximum size of a single 9P message.
+	Msize int
+
+	// Tag references the Tread request that the Rread messages
+	// are in response to.
+	Tag uint16
+}
+
+// A TwritePipe implements io.Writer. It encodes written data
+// to 9P Twrite messages and writes them to an underlying writer.
+type TwritePipe struct {
+	// The underlying Writer.
+	W *TxWriter
+
+	// The Maximum size of a single 9P message.
+	Msize int
+
+	// The fid to write to.
+	Fid uint32
+
+	// Tag is used to acquire unique tags for outgoing Twrite
+	// messages.
+	Tag *pool.TagPool
+
+	// The offset to start writing data at. Do not modify after
+	// the first call to Write.
+	Offset int64
+
+	n int64
+}
+
+// Write writes Rread messages to w's underlying TxWriter. If len(p)
+// is greater than the maximum message size, multiple Rread messages
+// will be generated.
+func (w *RreadPipe) Write(p []byte) (n int, err error) {
+	for i := len(p); i > 0; i -= w.Msize {
+		upto := w.Msize
+		if i < w.Msize {
+			upto = i
+		}
+		tx := w.W.Tx()
+		tx.Close()
+
+		if err != nil {
+			break
+		}
+		p = p[upto:]
+		n += upto
+	}
+	return n, err
+}
+
+var (
+	errOffsetOverflow = errors.New("write past max int64 in file")
+	errTagFull        = errors.New("no free tags (too many pending requests)")
+)
+
+// Write writes Twrite messages to w's underlying TxWriter. If len(p)
+// is greater than the maximum message size, multiple Rread messages
+// will be generated.
+func (w *TwritePipe) Write(p []byte) (n int, err error) {
+
+	if math.MaxInt64-int64(len(p)) < w.Offset {
+		return 0, errOffsetOverflow
+	}
+
+	for i := len(p); i > 0; i -= w.Msize {
+		upto := w.Msize
+		if i < w.Msize {
+			upto = i
+		}
+		tag, ok := w.Tag.Get()
+		if !ok {
+			return n, errTagFull
+		}
+		tx := w.W.Tx()
+		tx.Close()
+
+		if err != nil {
+			break
+		}
+		p = p[upto:]
+		n += upto
+	}
+	w.n += int64(n)
+	return n, err
+}
+
+
+The pipe is more difficult than it appears on the surface:
+
+# Read
+- Wait for a Twrite message to appear for your fid.
+
+# Write
+- Wait for a Tread message to appear for your fid.
+- Data to write gets wrapped up in an Rread message.
