@@ -18,6 +18,7 @@ type Encoder struct {
 
 // NewEncoder creates a new Encoder that writes 9P messages
 // to w. Encoders are safe to use from multiple goroutines.
+// An Encoder does not perform any buffering of messages.
 func NewEncoder(w io.Writer) *Encoder {
 	ew := util.ErrWriter{W: w}
 	return &Encoder{
