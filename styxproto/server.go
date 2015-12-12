@@ -59,6 +59,11 @@ func (w *ResponseWriter) Close() {
 	w.conn.mu.Unlock()
 }
 
+// Flush writes any pending data to the underlying io.Writer
+func (w *ResponseWriter) Flush() error {
+	return w.conn.bw.Flush()
+}
+
 func (c *Conn) pending(tag uint16) (context.CancelFunc, bool) {
 	c.mu.RLock()
 	cancel, ok := c.transaction[tag]
