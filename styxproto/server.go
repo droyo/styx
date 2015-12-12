@@ -150,8 +150,10 @@ func (c *Conn) serveMsg(m Msg, cx context.Context, srv Server) {
 		if ver := m.Version(); bytes.HasPrefix(ver, []byte("9P2000")) {
 			c.Rversion(c.MaxSize, "9P2000")
 			c.version = "9P2000"
+			return
 		} else {
 			c.Rversion(c.MaxSize, "unknown")
+			return
 		}
 	} else if !ok && c.version == "" {
 		c.Rerror(m.Tag(), "need Tversion")
