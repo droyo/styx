@@ -105,6 +105,11 @@ const MinBufSize = MaxWElem*(MaxFilenameLen+2) + 13 + 4
 // DefaultBufSize is the default buffer size used in a Parser
 const DefaultBufSize = 8192
 
+const megabyte = 1 << 20
+
+// DefaultMaxSize is the default maximum size of a 9P message.
+const DefaultMaxSize = 8 * megabyte
+
 // See stat(5) for layout of a stat structure
 const minStatLen = 49
 const maxStatLen = minStatLen + MaxFilenameLen + (MaxUidLen * 3)
