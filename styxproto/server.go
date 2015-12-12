@@ -45,19 +45,18 @@ func (c *Conn) close() {
 // either due to a Tflush request by a Client, or some other deadline.
 type ResponseWriter struct {
 	*Encoder
+	tag     uint16
+	conn    *Conn
+	pending bool
 	context.Context
-	done chan struct{}
 }
 
 // A ResponseWriter must be closed to signify that a transaction
 // is completed.
 func (w *ResponseWriter) Close() {
-	select {
-	case <-w.done:
-		// double close is OK
-	default:
-		close(w.done)
-	}
+	w.conn.mu.Lock()
+	delete(w.conn.transaction, w.tag)
+	w.conn.mu.Unlock()
 }
 
 func (c *Conn) pending(tag uint16) (context.CancelFunc, bool) {
@@ -84,7 +83,8 @@ func (c *Conn) newResponseWriter(m Msg, cx context.Context) (*ResponseWriter, er
 	return &ResponseWriter{
 		Encoder: c.Encoder,
 		Context: cx,
-		done:    make(chan struct{}),
+		conn:    c,
+		tag:     tag,
 	}, nil
 }
 
@@ -104,11 +104,12 @@ func NewConn(rwc io.ReadWriteCloser, msize int64) *Conn {
 
 	bw := bufio.NewWriter(rwc)
 	return &Conn{
-		Encoder: NewEncoder(bw),
-		Decoder: NewDecoderSize(rwc, MinBufSize),
-		MaxSize: uint32(msize),
-		bw:      bw,
-		rwc:     rwc,
+		Encoder:     NewEncoder(bw),
+		Decoder:     NewDecoderSize(rwc, MinBufSize),
+		MaxSize:     uint32(msize),
+		transaction: make(map[uint16]context.CancelFunc),
+		bw:          bw,
+		rwc:         rwc,
 	}
 }
 
@@ -167,12 +168,6 @@ func (c *Conn) serveMsg(m Msg, cx context.Context, srv Server) {
 		c.Rerror(m.Tag(), "%s", err)
 		return
 	}
-	go func() {
-		<-w.done
-		c.mu.Lock()
-		delete(c.transaction, m.Tag())
-		c.mu.Unlock()
-	}()
 	switch m := m.(type) {
 	case Tauth:
 		srv.Auth(w, m)
