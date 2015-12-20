@@ -17,7 +17,7 @@ import (
 // diagnostic information during a Server's operation.
 // The Logger interface is implemented by *log.Logger.
 type Logger interface {
-	Printf(format string, v ...interface{})
+	Output(calldepth int, s string)
 }
 
 // A Server defines parameters for running a 9P server. The
@@ -49,13 +49,13 @@ func (s *Server) debug() bool {
 
 func (s *Server) debugf(format string, v ...interface{}) {
 	if s.TraceLog != nil {
-		s.TraceLog.Printf(format, v...)
+		s.TraceLog.Output(2, fmt.Sprintf(format, v...))
 	}
 }
 
 func (s *Server) logf(format string, v ...interface{}) {
 	if s.ErrorLog != nil {
-		s.ErrorLog.Printf(format, v...)
+		s.ErrorLog.Output(2, fmt.Sprintf(format, v...))
 	}
 }
 
