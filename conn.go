@@ -1,142 +1,229 @@
 package styx
 
 import (
-	"bufio"
 	"errors"
 	"io"
-	"sync"
+	"net"
+	"path"
+	"strings"
 
 	"golang.org/x/net/context"
 
+	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 )
 
-// A Conn represents the server-side of a 9P connection.
-// Multiple sessions may be multiplexed over a single
-// connection.
-type conn struct {
-	*styxproto.Decoder
-	*styxproto.Encoder
-	bw         *bufio.Writer
-	rwc        io.ReadWriteCloser
-	srv        *Server
-	state      connState
-	remoteAddr string
-
-	qidbuf, statbuf []byte
-
-	sessionLock sync.RWMutex // protects the following map
-	session     map[uint32]*session
-
-	pendingLock sync.RWMutex // protects the following map
-	pending     map[uint16]context.CancelFunc
-}
-
-func (c *conn) channel() channel {
-	return channel{c: c}
-}
-
-// A Channel is a bidirectional communication channel between
-// the server and client, that is implemented using read/write
-// operations.
-type channel struct {
-	rw io.ReadWriter
-	c  *conn
-}
-
-// Read reads any Twrite messages incoming from the client.
-func (ch channel) Read(p []byte) (int, error) {
-	return 0, errors.New("todo")
-}
-
-// Write sends Rread responses to the client.
-func (ch channel) Write(p []byte) (int, error) {
-	return 0, errors.New("todo")
-}
-
-// Transport returns the underlying connection.
-func (ch channel) Transport() interface{} {
-	return ch.c.rwc
-}
-
-// Conn returns the underlying connection used by a Conn.
-// It can be accessed to implement transport-based authentication
-// methods. The return value of Conn must never be read from,
-// written to, or closed.
-func (c *conn) conn() interface{} {
-	return c.rwc
-}
-
-// getPending retrieves a CancelFunc for a pending operation.
-// ok is true only if the cancelFunc could be retrieved.
-func (c *conn) getPending(tag uint16) (cancel context.CancelFunc, ok bool) {
-	c.pendingLock.RLock()
-	cancel, ok = c.pending[tag]
-	c.pendingLock.RUnlock()
-	return cancel, ok
-}
-
-// getSession retrieves the session associated with fid. The returned
-// session is non-nil only if the second return parameter is true.
-func (c *conn) getSession(fid uint32) (*session, bool) {
-	c.sessionLock.RLock()
-	s, ok := c.session[fid]
-	c.sessionLock.RUnlock()
-	return s, ok
-}
-
-type attach interface {
-	styxproto.Msg
-	Uname() []byte
-	Aname() []byte
-	Fid() uint32
-	Afid() uint32
-}
-
-func (c *conn) newSession(msg attach) *session {
-	s := &session{
-		uname: string(msg.Uname()),
-		aname: string(msg.Aname()),
-		conn:  c,
+func newQid(qtype uint8, version uint32, path uint64) styxproto.Qid {
+	var buf [styxproto.QidLen]byte
+	q, _, err := styxproto.NewQid(buf[:], qtype, version, path)
+	if err != nil {
+		panic(err)
 	}
-	fid := msg.Fid()
-
-	c.sessionLock.Lock()
-	c.session[fid] = s
-	c.sessionLock.Unlock()
-
-	if afid := msg.Afid(); afid != styxproto.NoFid {
-		c.sessionLock.Lock()
-		c.session[afid] = s
-		c.sessionLock.Unlock()
-	}
-
-	return s
+	return q
 }
 
-type connState int
+type session struct {
+	uname, aname string
+}
 
-const (
-	stateNew    connState = iota // Tversion not received yet
-	stateActive                  // Version negotiated, ready to serve requests
+var (
+	errFidInUse     = errors.New("fid already in use")
+	errNoFid        = errors.New("no such fid")
+	errNotSupported = errors.New("not supported")
 )
 
-func newConn(rwc io.ReadWriteCloser, srv *Server) *conn {
-	bw := newBufioWriter(rwc)
+// an open file or position in a directory
+type file struct {
+	path  string
+	ftype uint8
+	data  io.ReadWriteCloser
+}
+
+// A conn implements the styxproto.Server interface.
+type conn struct {
+	srv    *Server
+	qidbuf [styxproto.QidLen]byte
+	cx     context.Context
+
+	afid    util.Map //map[fid] session
+	session util.Map //map[fid] session
+	file    util.Map //map[fid] file
+}
+
+func (h *conn) validAfid(afid uint32, user, access string) bool {
+	var s session
+	return h.afid.Fetch(afid, &s) && s.uname == user && s.aname == access
+}
+
+func (h *conn) getSession(fid uint32) (session, bool) {
+	s, ok := h.session.Get(fid)
+	return s.(session), ok
+}
+
+func (h *conn) putSession(fid uint32, uname, aname string) {
+	h.session.Put(fid, session{
+		uname: uname,
+		aname: aname,
+	})
+}
+
+// returns an error if fid is in use for another file
+func (h *conn) putFile(fid uint32, path string, ftype uint8, data io.ReadWriteCloser) error {
+	if h.file.Add(fid, file{path: path, ftype: ftype, data: data}) {
+		return nil
+	}
+	return errFidInUse
+}
+
+func (h *conn) getFile(fid uint32) (f file, ok bool) {
+	ok = h.file.Fetch(fid, &f)
+	return f, ok
+}
+
+// newConn returns a conn for a new connection.
+func newConn(srv *Server, cx context.Context) *conn {
 	return &conn{
-		rwc:     rwc,
-		srv:     srv,
-		session: make(map[uint32]*session),
-		bw:      bw,
-		Decoder: newDecoder(rwc),
-		Encoder: styxproto.NewEncoder(bw),
-		qidbuf:  make([]byte, styxproto.QidLen*styxproto.MaxWElem),
-		statbuf: make([]byte, 512),
+		srv: srv,
 	}
 }
 
-func (c *conn) close() error {
-	putDecoder(c.Decoder)
-	putBufioWriter(c.bw)
-	return c.rwc.Close()
+func (h *conn) Attach(w *styxproto.ResponseWriter, m styxproto.Tattach) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	rootQid := newQid(styxproto.QTDIR, 0, util.Hash64(m.Aname()))
+	if afid := m.Afid(); afid == styxproto.NoFid && h.srv.Auth != nil {
+		rwc := util.BlackHole{}
+		err := h.srv.Auth.Auth(w.Context, rwc, string(m.Uname()), string(m.Aname()))
+		if err != nil {
+			w.Rerror(m.Tag(), "%s", err)
+			return
+		}
+	} else if afid != styxproto.NoFid && h.srv.Auth != nil {
+		if !h.validAfid(afid, string(m.Uname()), string(m.Aname())) {
+			w.Rerror(m.Tag(), "auth failed")
+			return
+		}
+	}
+	if err := h.putFile(m.Fid(), "/", rootQid.Type(), nil); err != nil {
+		w.Rerror(m.Tag(), "%s", err)
+	} else {
+		w.Rattach(m.Tag(), rootQid)
+	}
+}
+
+func (h *conn) Auth(w *styxproto.ResponseWriter, m styxproto.Tauth) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	if h.srv.Auth == nil {
+		w.Rerror(m.Tag(), "not supported")
+		return
+	}
+
+	aqid := newQid(styxproto.QTAUTH, 0, 0)
+	client, server := net.Pipe()
+	if err := h.putFile(m.Afid(), "", styxproto.QTAUTH, client); err != nil {
+		w.Rerror(m.Tag(), "%s", err)
+		client.Close()
+		return
+	}
+	uname, aname := string(m.Uname()), string(m.Aname())
+
+	go h.srv.Auth.Auth(w.Context, server, uname, aname)
+	w.Rauth(m.Tag(), aqid)
+}
+
+func (h *conn) Clunk(w *styxproto.ResponseWriter, m styxproto.Tclunk) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+
+	file, ok := h.getFile(m.Fid())
+	if !ok {
+		w.Rerror(m.Tag(), "%s", errNoFid)
+		return
+	}
+	h.file.Del(m.Fid())
+	if file.data != nil {
+		file.data.Close()
+	}
+	w.Rclunk(m.Tag())
+}
+
+func (h *conn) Create(w *styxproto.ResponseWriter, m styxproto.Tcreate) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	w.Rerror(m.Tag(), "%s", errNotSupported)
+}
+
+func (h *conn) Open(w *styxproto.ResponseWriter, m styxproto.Topen) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	w.Rerror(m.Tag(), "%s", errNotSupported)
+}
+
+func (h *conn) Read(w *styxproto.ResponseWriter, m styxproto.Tread) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	_, ok := h.getFile(m.Fid())
+	if !ok {
+		w.Rerror(m.Tag(), "%s", errNoFid)
+		return
+	}
+	w.Rerror(m.Tag(), "%s", errNotSupported)
+}
+
+func (h *conn) Remove(w *styxproto.ResponseWriter, m styxproto.Tremove) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	w.Rerror(m.Tag(), "%s", errNotSupported)
+}
+
+func (h *conn) Stat(w *styxproto.ResponseWriter, m styxproto.Tstat) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	w.Rerror(m.Tag(), "%s", errNotSupported)
+}
+
+func (h *conn) Walk(w *styxproto.ResponseWriter, m styxproto.Twalk) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+
+	parent, ok := h.getFile(m.Fid())
+	if !ok {
+		w.Rerror(m.Tag(), "%s", errNoFid)
+		return
+	}
+	if parent.ftype == styxproto.QTAUTH {
+		w.Rerror(m.Tag(), "cannot walk from afid")
+		return
+	}
+	s := make([]string, 0, m.Nwname()+1)
+	s = append(s, parent.path)
+	q := make([]styxproto.Qid, 0, m.Nwname())
+	for i := 0; i < m.Nwname(); i++ {
+		s = append(s, string(m.Wname(i)))
+		q = append(q, newQid(styxproto.QTDIR, 0, util.Hash64(m.Wname(i))))
+	}
+	p := path.Clean(strings.Join(s, "/"))
+	if strings.Contains(p, "Trash") {
+		w.Rerror(m.Tag(), "file %q not found", p)
+		return
+	}
+	if err := h.putFile(m.Newfid(), p, styxproto.QTDIR, nil); err != nil {
+		w.Rerror(m.Tag(), "%s", err)
+	} else {
+		h.srv.debugf("walked from %q to %q", parent.path, p)
+		w.Rwalk(m.Tag(), q...)
+	}
+}
+
+func (h *conn) Write(w *styxproto.ResponseWriter, m styxproto.Twrite) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	w.Rerror(m.Tag(), "%s", errNotSupported)
+}
+
+func (h *conn) Wstat(w *styxproto.ResponseWriter, m styxproto.Twstat) {
+	defer w.Close()
+	h.srv.debugf("← %s", m)
+	w.Rerror(m.Tag(), "%s", errNotSupported)
 }

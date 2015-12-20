@@ -2,10 +2,14 @@ package styx
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"aqwari.net/net/styx/internal/util"
+	"aqwari.net/net/styx/styxproto"
 	"aqwari.net/retry"
 )
 
@@ -82,10 +86,16 @@ func (srv *Server) Serve(l net.Listener) error {
 		} else {
 			try = 0
 		}
-		c := newConn(rwc, srv)
-		c.remoteAddr = rwc.RemoteAddr().String()
-		srv.debugf("accepeted connection from %s", rwc.RemoteAddr())
-		go c.serve()
+		c := styxproto.NewConn(rwc, srv.MaxSize)
+		go func() {
+			srv.debugf("accepted connection from %s", rwc.RemoteAddr())
+			cx := context.WithValue(context.Background(), "conn", rwc)
+			conn := newConn(srv, cx)
+			err := styxproto.Serve(c, cx, conn)
+			if err != nil {
+				srv.logf("error serving %s: %s", rwc.RemoteAddr(), err)
+			}
+		}()
 	}
 }
 
