@@ -12,25 +12,21 @@ import (
 	"aqwari.net/net/styx"
 )
 
-// The SocketPeerID authentication method uses the underlying transport
-// to authenticate users. The underlying connection must be a unix
-// socket. The authentication method will obtain the user of the
-// connecting process, and compare it to the user parameter in the
-// authentication request.  Authentication fails if the user name does
-// not match, or the underlying transport is not a unix socket.
-var SocketPeerID authSocket
-
-type authSocket struct{}
-
 var (
 	errSocketUser = errors.New("username of connecting process does not match request")
 	errSocketConn = errors.New("underlying connection is not a unix socket")
 )
 
-func (authSocket) Auth(rw styx.Channel, user, _ string) error {
-	connUid, _, err := getpeereid(rw.Transport())
+// SocketPeerID uses the underlying unix socket to authenticate users.
+// The underlying connection must be a unix socket. The authentication
+// method will obtain the user of the connecting process, and compare
+// it to the user parameter in the authentication request.  Authentication
+// fails if the user name does not match, or the underlying transport
+// is not a unix socket.
+func SocketPeerID(rwc styx.Channel, user, _ string) error {
+	connUid, _, err := getpeereid(rwc.Transport())
 	if err != nil {
-		return errAuthFailure
+		return err
 	}
 	reqUid, err := lookupUid(user)
 	if err != nil {

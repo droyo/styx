@@ -34,7 +34,7 @@ type Server struct {
 
 	// Auth is used to authenticate user sessions. If nil,
 	// authentication is disabled.
-	Auth Auth
+	Auth AuthFunc
 
 	// If not nil, ErrorLog will be used to log unexpected
 	// errors accepting or handling connections. TraceLog,

@@ -96,7 +96,7 @@ func (h *conn) Attach(w *styxproto.ResponseWriter, m styxproto.Tattach) {
 			Context:         h.cx,
 			ReadWriteCloser: util.BlackHole{},
 		}
-		err := h.srv.Auth.Auth(&ch, string(m.Uname()), string(m.Aname()))
+		err := h.srv.Auth(&ch, string(m.Uname()), string(m.Aname()))
 		if err != nil {
 			w.Rerror(m.Tag(), "%s", err)
 			return
@@ -135,7 +135,7 @@ func (h *conn) Auth(w *styxproto.ResponseWriter, m styxproto.Tauth) {
 		Context:         w.Context,
 		ReadWriteCloser: server,
 	}
-	go h.srv.Auth.Auth(&ch, uname, aname)
+	go h.srv.Auth(&ch, uname, aname)
 	w.Rauth(m.Tag(), aqid)
 }
 

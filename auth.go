@@ -26,23 +26,24 @@ func (ch *Channel) Transport() net.Conn {
 	return nil
 }
 
-// Types that implement the Auth interface can be used to authenticate
-// a user to a plan 9 server. The authentication protocol itself is
-// tunnelled over 9P via read and write operations to a special file,
-// and is outside the scope of the 9P protocol.
+// An AuthFunc is used to authenticate a user to a 9P server. The
+// authentication protocol itself is tunnelled over 9P via read and
+// write operations to a special file, and is outside the scope of the
+// 9P protocol.
 //
-// The Auth method must determine that a client is authorized to start
+// An AuthFunc must determine that a client is authorized to start
 // a 9P session to the file tree specified by the access parameter.
 // The Auth method may receive and send data over rwc. Alternatively,
-// additional information can be passed through the Context value
-// to perform "external" authentication.
+// additional information can be passed through the Channel's context
+// for external authentication. Notably, the Transport method of the
+// Channel can be used to access the underlying network connection,
+// in order to authenticate based on TLS certificates, unix uid values
+// (on a unix socket), etc.
 //
-// The Auth method must return a non-nil error if authentication fails.
+// An AuthFunc must return a non-nil error if authentication fails.
 // The error may be sent to the client and should not contain any
-// sensitive information. If authentication succeeds, the Auth method
+// sensitive information. If authentication succeeds, an AuthFunc
 // must return nil.
 //
-// Existing Auth implementations can be found in the styxauth package.
-type Auth interface {
-	Auth(rwc *Channel, user, access string) error
-}
+// Existing AuthFunc implementations can be found in the styxauth package.
+type AuthFunc func(rwc *Channel, user, access string) error
