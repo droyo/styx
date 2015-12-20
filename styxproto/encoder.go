@@ -309,6 +309,21 @@ func (enc *Encoder) Rread(tag uint16, data []byte) error {
 	return enc.Err()
 }
 
+// Rreader obtains the data portion of an Rread message from an io.Reader.
+func (enc *Encoder) Rreader(tag uint16, count int64, r io.Reader) error {
+	if int64(math.MaxUint32-minSizeLUT[msgRread]) < count {
+		return errTooBig
+	}
+	size := uint32(minSizeLUT[msgRread]) + uint32(count)
+
+	tx := enc.w.Tx()
+	defer tx.Close()
+
+	pheader(tx, size, msgRread, tag, uint32(count))
+	_, err := io.CopyN(tx, r, int64(size))
+	return err
+}
+
 // Twrite writes a Twrite message to the underlying io.Writer. An error is returned
 // if the message cannot fit inside a single 9P message.
 func (enc *Encoder) Twrite(tag uint16, fid uint32, offset int64, data []byte) error {
@@ -325,6 +340,23 @@ func (enc *Encoder) Twrite(tag uint16, fid uint32, offset int64, data []byte) er
 	puint32(tx, uint32(len(data)))
 	tx.Write(data)
 	return enc.Err()
+}
+
+// Twriter obtains the data portion of a Twrite message from an io.Reader.
+func (enc *Encoder) Twriter(tag uint16, fid uint32, offset, count int64, r io.Reader) error {
+	if int64(math.MaxUint32-minSizeLUT[msgTwrite]) < count {
+		return errTooBig
+	}
+	size := uint32(minSizeLUT[msgTwrite]) + uint32(count)
+
+	tx := enc.w.Tx()
+	defer tx.Close()
+
+	pheader(tx, size, msgTread, tag, fid)
+	puint64(tx, uint64(offset))
+	puint32(tx, uint32(count))
+	_, err := io.CopyN(tx, r, int64(size))
+	return err
 }
 
 // Rwrite writes an Rwrite message to the underlying io.Writer. An error is returned
