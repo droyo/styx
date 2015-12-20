@@ -103,7 +103,7 @@ func NewConn(rwc io.ReadWriteCloser, msize int64) *Conn {
 	if msize < MinBufSize {
 		msize = MinBufSize
 	}
-	if msize < 0 {
+	if msize <= 0 {
 		msize = DefaultMaxSize
 	}
 
