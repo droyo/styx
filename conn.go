@@ -92,8 +92,11 @@ func (h *conn) Attach(w *styxproto.ResponseWriter, m styxproto.Tattach) {
 	h.srv.debugf("← %s", m)
 	rootQid := newQid(styxproto.QTDIR, 0, util.Hash64(m.Aname()))
 	if afid := m.Afid(); afid == styxproto.NoFid && h.srv.Auth != nil {
-		rwc := util.BlackHole{}
-		err := h.srv.Auth.Auth(w.Context, rwc, string(m.Uname()), string(m.Aname()))
+		ch := Channel{
+			Context:         h.cx,
+			ReadWriteCloser: util.BlackHole{},
+		}
+		err := h.srv.Auth.Auth(&ch, string(m.Uname()), string(m.Aname()))
 		if err != nil {
 			w.Rerror(m.Tag(), "%s", err)
 			return
@@ -128,7 +131,11 @@ func (h *conn) Auth(w *styxproto.ResponseWriter, m styxproto.Tauth) {
 	}
 	uname, aname := string(m.Uname()), string(m.Aname())
 
-	go h.srv.Auth.Auth(w.Context, server, uname, aname)
+	ch := Channel{
+		Context:         w.Context,
+		ReadWriteCloser: server,
+	}
+	go h.srv.Auth.Auth(&ch, uname, aname)
 	w.Rauth(m.Tag(), aqid)
 }
 

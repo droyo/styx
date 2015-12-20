@@ -2,9 +2,29 @@ package styx
 
 import (
 	"io"
+	"net"
 
 	"golang.org/x/net/context"
 )
+
+// A Channel provides authentication methods with a bidirectional
+// channel between the client and server, along with any contextual
+// information recorded by the server. Of note is the "conn" value,
+// which returns the underlying net.Conn value for the network
+// connection.
+type Channel struct {
+	context.Context
+	io.ReadWriteCloser
+}
+
+// Transport retrieves the underlying net.Conn for a Channel, or nil
+// if it is not stored in the channel context.
+func (ch *Channel) Transport() net.Conn {
+	if c, ok := ch.Value("conn").(net.Conn); ok {
+		return c
+	}
+	return nil
+}
 
 // Types that implement the Auth interface can be used to authenticate
 // a user to a plan 9 server. The authentication protocol itself is
@@ -24,5 +44,5 @@ import (
 //
 // Existing Auth implementations can be found in the styxauth package.
 type Auth interface {
-	Auth(cx context.Context, rwc io.ReadWriteCloser, user, access string) error
+	Auth(rwc *Channel, user, access string) error
 }
