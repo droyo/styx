@@ -43,6 +43,8 @@ type Server struct {
 	ErrorLog, TraceLog Logger
 }
 
+type Handler interface{}
+
 func (s *Server) debug() bool {
 	return s.TraceLog != nil
 }
@@ -58,13 +60,6 @@ func (s *Server) logf(format string, v ...interface{}) {
 		s.ErrorLog.Output(2, fmt.Sprintf(format, v...))
 	}
 }
-
-type Handler interface {
-	Serve9P(ResponseWriter, *Request)
-}
-
-type ResponseWriter struct{}
-type Request struct{}
 
 // Serve accepts connections on the listener l, creating a new service
 // goroutine for each. The service goroutines read requests and then
