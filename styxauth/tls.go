@@ -18,18 +18,22 @@ var (
 // TLSAuth type.
 var TLSSubjectCN = TLSAuth(checkSubjectCN)
 
-// TLSAuth returns a styx.Auth value that authenticates a user based
+// A TLSAuthFunc is called when validating an attach request based on
+// the underlying TLS connection.
+type TLSAuthFunc func(user, access string, state tls.ConnectionState) error
+
+// TLSAuth returns a styx.AuthFunc value that authenticates a user based
 // on the status of the underlying TLS connection.  After validating
 // the client certificate, the callback function is called with the
 // connection state as a parameter.  The callback must return nil if
 // authentication succeeds, and a non-nil error otherwise.
-type TLSAuth func(user, access string, state tls.ConnectionState) error
-
-func (fn TLSAuth) Auth(rw styx.Channel, user, access string) error {
-	if tlsconn, ok := rw.Transport().(*tls.Conn); ok {
-		return fn(user, access, tlsconn.ConnectionState())
+func TLSAuth(fn TLSAuthFunc) styx.AuthFunc {
+	return func(rwc *styx.Channel, user, access string) error {
+		if tlsconn, ok := rwc.Transport().(*tls.Conn); ok {
+			return fn(user, access, tlsconn.ConnectionState())
+		}
+		return errTLSConn
 	}
-	return errTLSConn
 }
 
 func checkSubjectCN(user, access string, state tls.ConnectionState) error {
