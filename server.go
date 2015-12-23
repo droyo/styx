@@ -9,7 +9,7 @@ import (
 	"golang.org/x/net/context"
 
 	"aqwari.net/net/styx/internal/util"
-	"aqwari.net/net/styx/styxproto"
+	"aqwari.net/net/styx/styxserver"
 	"aqwari.net/retry"
 )
 
@@ -43,7 +43,10 @@ type Server struct {
 	ErrorLog, TraceLog Logger
 }
 
-type Handler interface{}
+// Types implementing the Handler interface can be registered to receive
+// 9P requests to a specific path or subtree in the 9P server.
+type Handler interface {
+}
 
 func (s *Server) debug() bool {
 	return s.TraceLog != nil
@@ -81,12 +84,12 @@ func (srv *Server) Serve(l net.Listener) error {
 		} else {
 			try = 0
 		}
-		c := styxproto.NewConn(rwc, srv.MaxSize)
+		c := styxserver.NewConn(rwc, srv.MaxSize)
 		go func() {
 			srv.debugf("accepted connection from %s", rwc.RemoteAddr())
 			cx := context.WithValue(context.Background(), "conn", rwc)
 			conn := newConn(srv, cx)
-			err := styxproto.Serve(c, cx, conn)
+			err := styxserver.Serve(c, cx, conn)
 			if err != nil {
 				srv.logf("error serving %s: %s", rwc.RemoteAddr(), err)
 			}

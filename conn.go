@@ -11,6 +11,7 @@ import (
 
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
+	"aqwari.net/net/styx/styxserver"
 )
 
 func newQid(qtype uint8, version uint32, path uint64) styxproto.Qid {
@@ -87,7 +88,7 @@ func newConn(srv *Server, cx context.Context) *conn {
 	}
 }
 
-func (h *conn) Attach(w *styxproto.ResponseWriter, m styxproto.Tattach) {
+func (h *conn) Attach(w *styxserver.ResponseWriter, m styxproto.Tattach) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	rootQid := newQid(styxproto.QTDIR, 0, util.Hash64(m.Aname()))
@@ -114,7 +115,7 @@ func (h *conn) Attach(w *styxproto.ResponseWriter, m styxproto.Tattach) {
 	}
 }
 
-func (h *conn) Auth(w *styxproto.ResponseWriter, m styxproto.Tauth) {
+func (h *conn) Auth(w *styxserver.ResponseWriter, m styxproto.Tauth) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	if h.srv.Auth == nil {
@@ -139,7 +140,7 @@ func (h *conn) Auth(w *styxproto.ResponseWriter, m styxproto.Tauth) {
 	w.Rauth(m.Tag(), aqid)
 }
 
-func (h *conn) Clunk(w *styxproto.ResponseWriter, m styxproto.Tclunk) {
+func (h *conn) Clunk(w *styxserver.ResponseWriter, m styxproto.Tclunk) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 
@@ -155,19 +156,19 @@ func (h *conn) Clunk(w *styxproto.ResponseWriter, m styxproto.Tclunk) {
 	w.Rclunk(m.Tag())
 }
 
-func (h *conn) Create(w *styxproto.ResponseWriter, m styxproto.Tcreate) {
+func (h *conn) Create(w *styxserver.ResponseWriter, m styxproto.Tcreate) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	w.Rerror(m.Tag(), "%s", errNotSupported)
 }
 
-func (h *conn) Open(w *styxproto.ResponseWriter, m styxproto.Topen) {
+func (h *conn) Open(w *styxserver.ResponseWriter, m styxproto.Topen) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	w.Rerror(m.Tag(), "%s", errNotSupported)
 }
 
-func (h *conn) Read(w *styxproto.ResponseWriter, m styxproto.Tread) {
+func (h *conn) Read(w *styxserver.ResponseWriter, m styxproto.Tread) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	_, ok := h.getFile(m.Fid())
@@ -178,19 +179,19 @@ func (h *conn) Read(w *styxproto.ResponseWriter, m styxproto.Tread) {
 	w.Rerror(m.Tag(), "%s", errNotSupported)
 }
 
-func (h *conn) Remove(w *styxproto.ResponseWriter, m styxproto.Tremove) {
+func (h *conn) Remove(w *styxserver.ResponseWriter, m styxproto.Tremove) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	w.Rerror(m.Tag(), "%s", errNotSupported)
 }
 
-func (h *conn) Stat(w *styxproto.ResponseWriter, m styxproto.Tstat) {
+func (h *conn) Stat(w *styxserver.ResponseWriter, m styxproto.Tstat) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	w.Rerror(m.Tag(), "%s", errNotSupported)
 }
 
-func (h *conn) Walk(w *styxproto.ResponseWriter, m styxproto.Twalk) {
+func (h *conn) Walk(w *styxserver.ResponseWriter, m styxproto.Twalk) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 
@@ -223,13 +224,13 @@ func (h *conn) Walk(w *styxproto.ResponseWriter, m styxproto.Twalk) {
 	}
 }
 
-func (h *conn) Write(w *styxproto.ResponseWriter, m styxproto.Twrite) {
+func (h *conn) Write(w *styxserver.ResponseWriter, m styxproto.Twrite) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	w.Rerror(m.Tag(), "%s", errNotSupported)
 }
 
-func (h *conn) Wstat(w *styxproto.ResponseWriter, m styxproto.Twstat) {
+func (h *conn) Wstat(w *styxserver.ResponseWriter, m styxproto.Twstat) {
 	defer w.Close()
 	h.srv.debugf("← %s", m)
 	w.Rerror(m.Tag(), "%s", errNotSupported)

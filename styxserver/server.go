@@ -1,4 +1,14 @@
-package styxproto
+/*
+Package styxserver implements a main loop for running a 9P server.
+
+The styxserver.Serve function takes as an argument a type that
+implements a callback for each type of 9P message available. It is
+the value's responsibility to respond to each message appropriately,
+and the Serve function will handle parsing of incoming messages,
+flushing of outgoing messages, and other bookkeeping such as handling
+cancellations via Tflush requests.
+*/
+package styxserver
 
 import (
 	"bufio"
@@ -8,6 +18,8 @@ import (
 	"math"
 	"sync"
 
+	"aqwari.net/net/styx/styxproto"
+
 	"golang.org/x/net/context"
 )
 
@@ -16,8 +28,8 @@ var errTagInUse = errors.New("tag already in use")
 // A Conn is a bidirectional connection that is capable of sending and
 // receiving 9P messages.
 type Conn struct {
-	*Encoder
-	*Decoder
+	*styxproto.Encoder
+	*styxproto.Decoder
 
 	// The maximum 9P message size. During protocol negotiation,
 	// the client sets the max size, and a server may set a lower
@@ -44,7 +56,7 @@ func (c *Conn) close() {
 // The embedded Context can be used to receive cancellation signals,
 // either due to a Tflush request by a Client, or some other deadline.
 type ResponseWriter struct {
-	*Encoder
+	*styxproto.Encoder
 	tag     uint16
 	conn    *Conn
 	pending bool
@@ -73,7 +85,7 @@ func (c *Conn) pending(tag uint16) (context.CancelFunc, bool) {
 
 // returns an error if the tag is already in use for another
 // transaction.
-func (c *Conn) newResponseWriter(m Msg, cx context.Context) (*ResponseWriter, error) {
+func (c *Conn) newResponseWriter(m styxproto.Msg, cx context.Context) (*ResponseWriter, error) {
 	tag := m.Tag()
 	cx, cancel := context.WithCancel(cx)
 
@@ -100,17 +112,17 @@ func NewConn(rwc io.ReadWriteCloser, msize int64) *Conn {
 	if msize > math.MaxUint32 {
 		msize = math.MaxUint32
 	}
-	if msize < MinBufSize {
-		msize = MinBufSize
+	if msize < styxproto.MinBufSize {
+		msize = styxproto.MinBufSize
 	}
 	if msize <= 0 {
-		msize = DefaultMaxSize
+		msize = styxproto.DefaultMaxSize
 	}
 
 	bw := bufio.NewWriter(rwc)
 	return &Conn{
-		Encoder:     NewEncoder(bw),
-		Decoder:     NewDecoderSize(rwc, MinBufSize),
+		Encoder:     styxproto.NewEncoder(bw),
+		Decoder:     styxproto.NewDecoderSize(rwc, styxproto.MinBufSize),
 		MaxSize:     uint32(msize),
 		transaction: make(map[uint16]context.CancelFunc),
 		bw:          bw,
@@ -118,34 +130,34 @@ func NewConn(rwc io.ReadWriteCloser, msize int64) *Conn {
 	}
 }
 
-// The Server interface is used by a Conn to service 9P requests. Each
-// method in the Srv interface corresponds with a 9P transaction.  Each
+// Types implementing Interface can be used by a Conn to service 9P
+// requests. Each method corresponds with a 9P transaction.  Each
 // transaction is considered pending until the provided ResponseWriter
 // is closed. Each method is called within the same goroutine as the
-// Serve function; parsing of further messages will be blocked until the
-// method returns. For long-running requests, a method should spawn
-// a goroutine to complete the transaction. All requests are subject to
-// cancellation by a subsequent Tflush request, or any other deadlines
+// Serve function; parsing of further messages will be blocked until
+// the method returns. For long-running requests, a method should spawn
+// a goroutine to complete the transaction. All requests are subject
+// to cancellation by a subsequent Tflush request, or any other deadlines
 // set by the Context passed to the Serve function.
-type Server interface {
-	Attach(*ResponseWriter, Tattach)
-	Auth(*ResponseWriter, Tauth)
-	Clunk(*ResponseWriter, Tclunk)
-	Create(*ResponseWriter, Tcreate)
-	Open(*ResponseWriter, Topen)
-	Read(*ResponseWriter, Tread)
-	Remove(*ResponseWriter, Tremove)
-	Stat(*ResponseWriter, Tstat)
-	Walk(*ResponseWriter, Twalk)
-	Write(*ResponseWriter, Twrite)
-	Wstat(*ResponseWriter, Twstat)
+type Interface interface {
+	Attach(*ResponseWriter, styxproto.Tattach)
+	Auth(*ResponseWriter, styxproto.Tauth)
+	Clunk(*ResponseWriter, styxproto.Tclunk)
+	Create(*ResponseWriter, styxproto.Tcreate)
+	Open(*ResponseWriter, styxproto.Topen)
+	Read(*ResponseWriter, styxproto.Tread)
+	Remove(*ResponseWriter, styxproto.Tremove)
+	Stat(*ResponseWriter, styxproto.Tstat)
+	Walk(*ResponseWriter, styxproto.Twalk)
+	Write(*ResponseWriter, styxproto.Twrite)
+	Wstat(*ResponseWriter, styxproto.Twstat)
 }
 
-func (c *Conn) serveMsg(m Msg, cx context.Context, srv Server) {
-	if m, ok := m.(Tversion); ok && c.version == "" {
+func (c *Conn) serveMsg(m styxproto.Msg, cx context.Context, srv Interface) {
+	if m, ok := m.(styxproto.Tversion); ok && c.version == "" {
 		msize := c.MaxSize
 		if n := m.Msize(); n < int64(msize) {
-			if n < MinBufSize {
+			if n < styxproto.MinBufSize {
 				c.Rerror(m.Tag(), "msize %d too small", n)
 				c.close()
 				return
@@ -176,36 +188,36 @@ func (c *Conn) serveMsg(m Msg, cx context.Context, srv Server) {
 		return
 	}
 	switch m := m.(type) {
-	case Tauth:
+	case styxproto.Tauth:
 		srv.Auth(w, m)
-	case Tattach:
+	case styxproto.Tattach:
 		srv.Attach(w, m)
-	case Twalk:
+	case styxproto.Twalk:
 		srv.Walk(w, m)
-	case Topen:
+	case styxproto.Topen:
 		srv.Open(w, m)
-	case Tcreate:
+	case styxproto.Tcreate:
 		srv.Create(w, m)
-	case Tread:
+	case styxproto.Tread:
 		srv.Read(w, m)
-	case Twrite:
+	case styxproto.Twrite:
 		srv.Write(w, m)
-	case Tclunk:
+	case styxproto.Tclunk:
 		srv.Clunk(w, m)
-	case Tremove:
+	case styxproto.Tremove:
 		srv.Remove(w, m)
-	case Tstat:
+	case styxproto.Tstat:
 		srv.Stat(w, m)
-	case Twstat:
+	case styxproto.Twstat:
 		srv.Wstat(w, m)
-	case Tflush:
+	case styxproto.Tflush:
 		tag := m.Tag()
 		if cancel, ok := c.pending(tag); ok {
 			cancel()
 		}
 		c.Rflush(tag)
 		w.Close()
-	case BadMessage:
+	case styxproto.BadMessage:
 		c.Rerror(m.Tag(), "bad message: %s", m.Err)
 		w.Close()
 	default:
@@ -217,7 +229,7 @@ func (c *Conn) serveMsg(m Msg, cx context.Context, srv Server) {
 // Serve receives requests on c and serves them by calling the
 // methods of srv. When calling methods on srv, the provided
 // ResponseWriter will use a Context derived from cx.
-func Serve(c *Conn, cx context.Context, srv Server) error {
+func Serve(c *Conn, cx context.Context, srv Interface) error {
 	for c.Encoder.Err() == nil && c.Decoder.Next() {
 		for _, m := range c.Messages() {
 			c.serveMsg(m, cx, srv)
