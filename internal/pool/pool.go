@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	FidPoolCeiling = ^uint32(0)
-	TagPoolCeiling = uint32(^uint16(0))
+	FidPoolCeiling = 1<<32 - 1
+	TagPoolCeiling = 1<<16 - 1
 )
 
 // save some typing

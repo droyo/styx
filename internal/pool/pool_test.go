@@ -55,3 +55,16 @@ func TestPool(t *testing.T) {
 		}
 	}
 }
+
+func TestPoolFull(t *testing.T) {
+	var pool TagPool
+	for i := 0; i < TagPoolCeiling+5; i++ {
+		n, ok := pool.Get()
+		if n > TagPoolCeiling {
+			t.Errorf("got %d > TagPoolCeiling from TagPool", n)
+		}
+		if i > TagPoolCeiling && ok {
+			t.Errorf("got tag %d from full pool", n)
+		}
+	}
+}
