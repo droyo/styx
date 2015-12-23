@@ -18,8 +18,9 @@ const (
 
 // save some typing
 var (
-	add = atomic.AddUint32
-	cas = atomic.CompareAndSwapUint32
+	add  = atomic.AddUint32
+	load = atomic.LoadUint32
+	cas  = atomic.CompareAndSwapUint32
 )
 
 type uint32slice []uint32
@@ -74,7 +75,7 @@ func (p *FidPool) Get() (fid uint32, ok bool) {
 }
 
 func (p *pool) get(ceil uint32) (id uint32, ok bool) {
-	if cas(&p.next, ceil, ceil-1) {
+	if load(&p.next) == ceil {
 		return 0, false
 	}
 	return add(&p.next, 1) - 1, true
