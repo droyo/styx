@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"sync"
-	"sync/atomic"
 )
 
 var (
@@ -30,32 +29,27 @@ func (w *TxWriter) Write(p []byte) (int, error) {
 }
 
 // A Tx allows for a set of multiple Write calls to be isolated from
-// other Writes. The returned io.WriteCloser will begin a transaction
-// on its first call to Write, and end the transaction when closed.
-// The returned Writer can only be used from a single goroutine.
+// other Writes. After Tx returns, all other writes to the TxWriter
+// will be blocked until the returned io.WriteCloser is closed.  The
+// returned io.WriteCloser can only be used from a single goroutine.
 func (w *TxWriter) Tx() io.WriteCloser {
-	return &tx{TxWriter: w}
+	w.mu.Lock()
+	return &tx{w}
 }
 
 type tx struct {
 	*TxWriter
-	closed uint32
-	once   sync.Once
 }
 
 func (w *tx) Write(p []byte) (int, error) {
-	w.once.Do(func() { w.mu.Lock() })
-	closed := atomic.LoadUint32(&w.closed)
-	if closed == 1 {
+	if w.TxWriter == nil {
 		return 0, errClosedWrite
 	}
 	return w.TxWriter.W.Write(p)
 }
 
 func (w *tx) Close() error {
-	if swapped := atomic.CompareAndSwapUint32(&w.closed, 0, 1); !swapped {
-		return errDoubleClose
-	}
 	w.mu.Unlock()
+	w.TxWriter = nil
 	return nil
 }
