@@ -212,7 +212,7 @@ func (c *Conn) serveMsg(m styxproto.Msg, cx context.Context, srv Interface) {
 		srv.Wstat(w, m)
 	case styxproto.Tflush:
 		tag := m.Tag()
-		if cancel, ok := c.pending(tag); ok {
+		if cancel, ok := c.pending(m.Oldtag()); ok {
 			cancel()
 		}
 		c.Rflush(tag)
