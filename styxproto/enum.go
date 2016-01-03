@@ -66,4 +66,10 @@ const (
 	DMREAD   = 0x4        // mode bit for read permission
 	DMWRITE  = 0x2        // mode bit for write permission
 	DMEXEC   = 0x1        // mode bit for execute permission
+
+	// Mask for the type bits
+	DMTYPE = DMDIR | DMAPPEND | DMEXCL | DMMOUNT | DMTMP
+
+	// Mask for the permissions bits
+	DMPERM = DMREAD | DMWRITE | DMEXEC
 )

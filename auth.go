@@ -17,9 +17,8 @@ type Channel struct {
 	io.ReadWriteCloser
 }
 
-// Transport retrieves the underlying net.Conn for a Channel, or nil
-// if it is not stored in the channel context.
-func (ch *Channel) Transport() net.Conn {
+// Conn retrieves the underlying io.ReadWriteCloser for a Channel.
+func (ch *Channel) Conn() interface{} {
 	if c, ok := ch.Value("conn").(net.Conn); ok {
 		return c
 	}

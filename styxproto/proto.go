@@ -449,8 +449,14 @@ func (m Tread) String() string {
 // The data portion of an Rread message can be consumed using the io.Reader
 // interface.
 type Rread struct {
-	io.Reader
+	r io.Reader
 	msg msg // headers plus any extra buffered data
+}
+
+// Read copies len(p) bytes from an Rread message's data field into
+// p. It returns the number of bytes copied and an error, if any.
+func (m Rread) Read(p []byte) (int, error) {
+	return m.r.Read(p)
 }
 
 // If a Tread requests asks for more data than can fit within a single 9P
@@ -468,8 +474,14 @@ func (m Rread) String() string { return fmt.Sprintf("Rread count=%d", m.Count())
 // The data portion of a Twrite request can be accessed via the
 // io.Reader interface.
 type Twrite struct {
-	io.Reader
+	r io.Reader
 	msg msg // headers plus any extra buffered data
+}
+
+// Read copies len(p) bytes from a Twrite message's data field into
+// p. It returns the number of bytes copied and an error, if any.
+func (m Twrite) Read(p []byte) (int, error) {
+	return m.r.Read(p)
 }
 
 func (m Twrite) Tag() uint16   { return m.msg.Tag() }

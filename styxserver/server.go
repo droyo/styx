@@ -107,7 +107,7 @@ func (c *Conn) newResponseWriter(m styxproto.Msg, cx context.Context) (*Response
 
 // NewConn creates a new Conn from the given io.ReadWriteCloser. A
 // Conn performs its own buffering for reads and writes. If msize is
-// negative, the maximum 9P message size is set to DefaultMaxSize.
+// <= 0, the maximum 9P message size is set to DefaultMaxSize.
 func NewConn(rwc io.ReadWriteCloser, msize int64) *Conn {
 	if msize > math.MaxUint32 {
 		msize = math.MaxUint32

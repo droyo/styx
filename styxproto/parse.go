@@ -381,10 +381,10 @@ func parseRread(dot msg, r io.Reader) (Msg, error) {
 	}
 
 	buffered := dot[minSizeLUT[msgRread]:]
-	m.Reader = bytes.NewReader(buffered)
+	m.r = bytes.NewReader(buffered)
 	if int64(len(buffered)) < count {
-		m.Reader = io.MultiReader(
-			m.Reader,
+		m.r = io.MultiReader(
+			m.r,
 			io.LimitReader(r, count-int64(len(buffered))))
 	}
 
@@ -411,10 +411,10 @@ func parseTwrite(dot msg, r io.Reader) (Msg, error) {
 	}
 
 	buffered := dot[minSizeLUT[msgTwrite]:]
-	m.Reader = bytes.NewReader(buffered)
+	m.r = bytes.NewReader(buffered)
 	if int64(len(buffered)) < count {
-		m.Reader = io.MultiReader(
-			m.Reader,
+		m.r = io.MultiReader(
+			m.r,
 			io.LimitReader(r, count-int64(len(buffered))))
 	}
 
