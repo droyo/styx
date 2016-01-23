@@ -24,7 +24,7 @@ var (
 // fails if the user name does not match, or the underlying transport
 // is not a unix socket.
 func SocketPeerID(rwc styx.Channel, user, _ string) error {
-	connUid, _, err := getpeereid(rwc.Transport())
+	connUid, _, err := getpeereid(rwc.Conn())
 	if err != nil {
 		return err
 	}
