@@ -62,15 +62,40 @@ func TestMinBufSize(t *testing.T) {
 }
 
 func testParseMsg(t *testing.T, r io.Reader) {
+	n := 0
+	os.MkdirAll("testoutput", 0777)
 	p := NewDecoder(r)
 	for p.Next() {
 		for _, m := range p.Messages() {
 			if b, ok := m.(BadMessage); ok {
 				t.Error(b)
-			} else if s, ok := m.(fmt.Stringer); ok {
+				continue
+			}
+			if s, ok := m.(fmt.Stringer); ok {
 				t.Logf("%d %s", m.Tag(), s.String())
 			} else {
 				t.Logf("%d %s", m.Tag(), m)
+			}
+			if false { // flip to generate data for fuzz testing
+				n++
+				name := fmt.Sprintf("testoutput/%03d.%T.9p", n, m)
+				if f, err := os.Create(name); err != nil {
+					t.Logf("failed to save message to %s: %s", name, err)
+				} else {
+					if _, err := f.Write(m.bytes()); err != nil {
+						t.Logf("failed to save message to %s: %s", name, err)
+					} else {
+						t.Logf("saved message to %s", name)
+					}
+					if r, ok := m.(io.Reader); ok {
+						if _, err := io.Copy(f, r); err != nil {
+							t.Logf("failed to copy %T body: %s", m, err)
+						} else {
+							t.Logf("copied %T body to %s", m, name)
+						}
+					}
+					f.Close()
+				}
 			}
 		}
 	}
