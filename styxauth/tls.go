@@ -29,7 +29,7 @@ type TLSAuthFunc func(user, access string, state tls.ConnectionState) error
 // authentication succeeds, and a non-nil error otherwise.
 func TLSAuth(fn TLSAuthFunc) styx.AuthFunc {
 	return func(rwc *styx.Channel, user, access string) error {
-		if tlsconn, ok := rwc.Transport().(*tls.Conn); ok {
+		if tlsconn, ok := rwc.Conn().(*tls.Conn); ok {
 			return fn(user, access, tlsconn.ConnectionState())
 		}
 		return errTLSConn
