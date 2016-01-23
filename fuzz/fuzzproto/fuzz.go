@@ -1,4 +1,4 @@
-package fuzz
+package fuzzproto
 
 import (
 	"bytes"
