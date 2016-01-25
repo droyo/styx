@@ -30,14 +30,14 @@ func (ch *Channel) Conn() interface{} {
 // write operations to a special file, and is outside the scope of the
 // 9P protocol.
 //
-// An AuthFunc must determine that a client is authorized to start
-// a 9P session to the file tree specified by the access parameter.
-// The Auth method may receive and send data over rwc. Alternatively,
+// An AuthFunc must determine that a client is authorized to start a
+// 9P session to the file tree specified by the access parameter.  The
+// Auth method may receive and send data over rwc. Alternatively,
 // additional information can be passed through the Channel's context
-// for external authentication. Notably, the Transport method of the
-// Channel can be used to access the underlying network connection,
-// in order to authenticate based on TLS certificates, unix uid values
-// (on a unix socket), etc.
+// for external authentication. Notably, the Conn method of the Channel
+// can be used to access the underlying network connection, in order
+// to authenticate based on TLS certificates, unix uid values (on a
+// unix socket), etc.
 //
 // An AuthFunc must return a non-nil error if authentication fails.
 // The error may be sent to the client and should not contain any
