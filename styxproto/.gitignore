@@ -1,3 +1,4 @@
 working
+styxproto-fuzz.zip
 corpus/*
 !corpus/*.9p
