@@ -78,7 +78,7 @@ func testParseMsg(t *testing.T, r io.Reader) {
 			}
 			if false { // flip to generate data for fuzz testing
 				n++
-				name := fmt.Sprintf("testoutput/%03d.%T.9p", n, m)
+				name := fmt.Sprintf("corpus/%03d.%T.9p", n, m)
 				if f, err := os.Create(name); err != nil {
 					t.Logf("failed to save message to %s: %s", name, err)
 				} else {
