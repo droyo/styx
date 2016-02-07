@@ -308,7 +308,7 @@ func parseTwalk(dot msg, _ io.Reader) (Msg, error) {
 		el, elems, err = verifyField(elems, last, padding)
 		if err != nil {
 			return nil, err
-		} else if err := verifyString(el); err != nil {
+		} else if err := verifyPathElem(el); err != nil {
 			return nil, err
 		} else if len(el) > MaxFilenameLen {
 			return nil, errLongFilename

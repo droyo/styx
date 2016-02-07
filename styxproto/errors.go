@@ -7,6 +7,7 @@ type parseError string
 func (p parseError) Error() string { return string(p) }
 
 var (
+	errContainsSlash  = parseError("slash in path element")
 	errInvalidMsgType = parseError("invalid message type")
 	errInvalidQidType = parseError("invalid type field in qid")
 	errInvalidUTF8    = parseError("string is not valid utf8")

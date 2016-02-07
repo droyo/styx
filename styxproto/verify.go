@@ -36,6 +36,17 @@ func verifyString(data []byte) error {
 	return nil
 }
 
+// Verify an element in a file system path. It must be a valid
+// UTF8 sequence and cannot contain the '/' character.
+func verifyPathElem(data []byte) error {
+	for _, v := range data {
+		if v == '/' {
+			return errContainsSlash
+		}
+	}
+	return verifyString(data)
+}
+
 // Verify the first variable-length field. If succesful, returns a nil
 // error and the remaining data after the field.  If fill is true, the
 // field (including 2-byte size) is expected to fill data, minus
