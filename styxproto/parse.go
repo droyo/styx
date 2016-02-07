@@ -66,6 +66,11 @@ func (s *Decoder) fetchMessages() error {
 		if oldstart == s.start {
 			panic("decoder did not advance but did not return an error")
 		}
+		// Stop after a Tversion message. This allows us to perform protocol
+		// negotiation *before* parsing additional messages.
+		if _, ok := result[0].(Tversion); ok {
+			break
+		}
 	}
 	if (err == bufio.ErrBufferFull || err == errShortRead) && len(result) > 0 {
 		err = nil
