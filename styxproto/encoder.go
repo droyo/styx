@@ -168,9 +168,10 @@ func (enc *Encoder) Rflush(tag uint16) {
 	pheader(tx, size, msgRflush, tag)
 }
 
-// Twalk writes a new Twalk message to the underlying io.Writer. An error is returned
-// if wname is longer than MaxWElem elements, or if any single element in
-// wname is longer than MaxFilenameLen bytes long.
+// Twalk writes a new Twalk message to the underlying io.Writer. An
+// error is returned if wname is longer than MaxWElem elements, or if
+// any single element in wname is longer than MaxFilenameLen bytes
+// long.
 func (enc *Encoder) Twalk(tag uint16, fid, newfid uint32, wname ...string) error {
 	if len(wname) > MaxWElem {
 		return errMaxWElem
