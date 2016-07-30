@@ -282,13 +282,19 @@ func (enc *Encoder) Tread(tag uint16, fid uint32, offset, count int64) error {
 	return nil
 }
 
-// Rread writes a new Rread message to the underlying io.Writer. An
-// error is returned if the message cannot fit inside a single 9P
-// message. If len(data) is greater than the Encoder's Msize, it is
-// broken up into multiple Rread messages.
-func (enc *Encoder) Rread(tag uint16, data []byte) {
+// Rread writes a new Rread message to the underlying io.Writer.
+// If len(data) is greater than the Encoder's Msize, it is broken up
+// into multiple Rread messages. Rread returns the number of bytes
+// written, plus any IO errors encountered.
+func (enc *Encoder) Rread(tag uint16, data []byte) (n int, err error) {
+	var nchunk int
+
 	msize := enc.Msize
 	if msize < MinBufSize {
+		// NOTE(droyo) I would be OK with a panic here; it implies
+		// the calling code is sending a non-Rversion/Tversion message
+		// on an uninitialized connection and can lead to unexpected
+		// behavior.
 		msize = MinBufSize
 	}
 	msize -= int64(minSizeLUT[msgRread])
@@ -297,22 +303,27 @@ func (enc *Encoder) Rread(tag uint16, data []byte) {
 		if int64(len(data)) > msize {
 			chunk = data[:msize]
 		}
-
 		size := uint32(minSizeLUT[msgRread]) + uint32(len(chunk))
+
 		tx := enc.w.Tx()
 		pheader(tx, size, msgRread, tag, uint32(len(chunk)))
-		tx.Write(chunk)
+		nchunk, err = tx.Write(chunk)
 		tx.Close()
 
+		n += nchunk
+		if err != nil {
+			break
+		}
 		data = data[len(chunk):]
 	}
+	return n, err
 }
 
 // Twrite writes a Twrite message to the underlying io.Writer. An error is returned
 // if the message cannot fit inside a single 9P message.
-func (enc *Encoder) Twrite(tag uint16, fid uint32, offset int64, data []byte) error {
+func (enc *Encoder) Twrite(tag uint16, fid uint32, offset int64, data []byte) (int, error) {
 	if math.MaxUint32-minSizeLUT[msgTwrite] < len(data) {
-		return errTooBig
+		return 0, errTooBig
 	}
 	size := uint32(minSizeLUT[msgTwrite]) + uint32(len(data))
 
@@ -322,8 +333,7 @@ func (enc *Encoder) Twrite(tag uint16, fid uint32, offset int64, data []byte) er
 	pheader(tx, size, msgTwrite, tag, fid)
 	puint64(tx, uint64(offset))
 	puint32(tx, uint32(len(data)))
-	tx.Write(data)
-	return enc.Err()
+	return tx.Write(data)
 }
 
 // Rwrite writes an Rwrite message to the underlying io.Writer.
