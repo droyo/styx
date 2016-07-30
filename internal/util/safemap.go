@@ -69,3 +69,10 @@ func (m *Map) Fetch(key, v interface{}) bool {
 	}
 	return false
 }
+
+// Do calls f while holding the write lock for a Map.
+func (m *Map) Do(f func(map[interface{}]interface{})) {
+	m.mu.Lock()
+	f(m.values)
+	m.mu.Unlock()
+}
