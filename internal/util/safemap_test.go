@@ -8,7 +8,7 @@ func TestMap(t *testing.T) {
 		i int
 	)
 
-	var m Map
+	m := NewMap()
 	m.Put("foo", 82)
 	m.Put("bar", "bundle")
 
