@@ -35,7 +35,9 @@ func (s uint32slice) Len() int           { return len(s) }
 // all allocated numbers greater than X have also been freed. While
 // this can result in FidPools becoming full prematurely for certain
 // pathological workloads, this tradeoff allows a FidPool to be simple,
-// and small, and allows the Get implementation to be lock-free.
+// and small, and allows the Get implementation to be lock-free. Because
+// clients are responsible for managing their own pools of identifiers, it cannot
+// exploit this implementation to harm a server.
 
 // A FidPool maintains a pool of free identifiers.  It is safe for
 // concurrent use. The zero value of a FidPool is an empty pool that will

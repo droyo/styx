@@ -82,8 +82,7 @@ func (s *Decoder) fetchMessages() error {
 // result. fetchOne will return bufio.ErrBufferFull if there is not
 // enough space in the buffer to hold the next message. fetchOne
 // will not perform additional I/O unless this is the first message being
-// parsed (len(result) == 0). fetchOne will return the offset of the
-// next message.
+// parsed (len(result) == 0).
 func (s *Decoder) fetchOne(result []Msg) ([]Msg, error) {
 	// fetchMessages guarantees it will return at least one message.
 	first := (len(result) == 0)

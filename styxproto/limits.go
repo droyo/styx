@@ -99,10 +99,10 @@ const MaxErrorLen = 512
 // of Tattach and Tauth requests.
 const MaxAttachLen = 255
 
-// MinBufSize is the minimum size (in bytes) of the internal buffers in a Parser.
+// MinBufSize is the minimum size (in bytes) of the internal buffers in a Decoder.
 const MinBufSize = MaxWElem*(MaxFilenameLen+2) + 13 + 4
 
-// DefaultBufSize is the default buffer size used in a Parser
+// DefaultBufSize is the default buffer size used in a Decoder
 const DefaultBufSize = 8192
 
 const megabyte = 1 << 20
