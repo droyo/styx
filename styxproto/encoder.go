@@ -12,9 +12,9 @@ import (
 // An Encoder writes 9P messages to an underlying
 // io.Writer.
 type Encoder struct {
-	Msize int64
-	w     *wire.TxWriter  // writes to ew
-	ew    *util.ErrWriter // wraps the connection
+	MaxSize int64
+	w       *wire.TxWriter  // writes to ew
+	ew      *util.ErrWriter // wraps the connection
 }
 
 // NewEncoder creates a new Encoder that writes 9P messages
@@ -289,7 +289,7 @@ func (enc *Encoder) Tread(tag uint16, fid uint32, offset, count int64) error {
 func (enc *Encoder) Rread(tag uint16, data []byte) (n int, err error) {
 	var nchunk int
 
-	msize := enc.Msize
+	msize := enc.MaxSize
 	if msize < MinBufSize {
 		// NOTE(droyo) I would be OK with a panic here; it implies
 		// the calling code is sending a non-Rversion/Tversion message
