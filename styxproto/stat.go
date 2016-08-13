@@ -111,7 +111,7 @@ func verifyStat(data []byte) error {
 	// type[2] dev[4] qid[13] mod[4] atime[4] mtime[4] length[8] name[s] uid[s] gid[s] muid[s]
 	if len(data) < minStatLen {
 		return errShortStat
-	} else if len(data) > maxStatLen {
+	} else if len(data) > MaxStatLen {
 		return errLongStat
 	}
 	if length := guint64(data[31:39]); length > MaxFileLen {

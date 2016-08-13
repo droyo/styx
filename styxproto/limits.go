@@ -112,7 +112,9 @@ const DefaultMaxSize = 8 * megabyte
 
 // See stat(5) for layout of a stat structure
 const minStatLen = 49
-const maxStatLen = minStatLen + MaxFilenameLen + (MaxUidLen * 3)
+
+// MaxStatLen is the maximum size of a Stat structure.
+const MaxStatLen = minStatLen + MaxFilenameLen + (MaxUidLen * 3)
 
 const maxWalkLen = MaxWElem * MaxFilenameLen
 

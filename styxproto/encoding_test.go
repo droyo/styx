@@ -14,7 +14,7 @@ func TestEncode(t *testing.T) {
 	var (
 		buf     bytes.Buffer
 		qbuf    = make([]byte, 13)
-		statbuf = make([]byte, maxStatLen)
+		statbuf = make([]byte, MaxStatLen)
 	)
 	enc := NewEncoder(&buf)
 	dec := NewDecoder(&buf)

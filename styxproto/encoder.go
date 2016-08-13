@@ -405,7 +405,7 @@ func (enc *Encoder) Tstat(tag uint16, fid uint32) {
 // If the Stat is larger than the maximum size allowed by
 // the NewStat function, a run-time panic occurs.
 func (enc *Encoder) Rstat(tag uint16, stat Stat) {
-	if len(stat) > maxStatLen {
+	if len(stat) > MaxStatLen {
 		panic(errLongStat)
 	}
 	if len(stat) < minStatLen {
@@ -424,7 +424,7 @@ func (enc *Encoder) Rstat(tag uint16, stat Stat) {
 // If the Stat is larger than the maximum size allowed by the
 // NewStat function, a run-time panic occurs.
 func (enc *Encoder) Twstat(tag uint16, fid uint32, stat Stat) {
-	if len(stat) > maxStatLen {
+	if len(stat) > MaxStatLen {
 		panic(errLongStat)
 	}
 	if len(stat) < minStatLen {
