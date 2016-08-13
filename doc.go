@@ -2,17 +2,17 @@
 Package styx provides 9P client and server implementations.
 
 The styx package allows for the implementation and usage of distributed
-file systems via the 9P filesystem protocol. The 9P filesystem protocol
-provides a lightweight, high-performance method of accessing remote
-resources as part of a hierarchical file system. The resources may
-be real files on a remote server, or they may represent bi-directional
-RPC calls. Regardless, the interface for serving or accessing the resources
-mimics the APIs for dealing with normal files.
+file systems via the 9P filesystem protocol. 9P provides a lightweight,
+high-performance method of accessing remote resources as part of a
+hierarchical file system. The resources may be real files on a
+remote server, or they may represent bi-directional RPC calls.
+Regardless, the interface for serving or accessing the resources
+mimics the APIs for dealing with traditional files.
 
 Remote URLs
 
-Many of the functions in the styx package take a URL parameter that
-specifieds the remote server to connect to. The URL is of the form
+Many of the client functions in the styx package take a URL parameter
+that specifieds the remote server to connect to. The URL is of the form
 
 	transport://server[:port]/path
 
@@ -26,7 +26,7 @@ transports are:
 
 	tcp  - tcp/ip connection to a remote server
 	tls  - TLS over tcp/ip to a remote server
-	unix - unix socket. host section must be empty.
+	unix - unix socket. host section must be empty
 
 Accessing files
 
@@ -75,7 +75,7 @@ example, ReadFile("tcp://example.net/path/to/file") will pack the
 following messages into a single packet:
 
 	Tversion 0xFF <msize> 9P2000
-	Tattach <tag> <fid> 0xFFFF none ""
+	Tattach <tag> <fid> 0xFFFF nobody ""
 	Twalk <tag> <fid> <newfid> path/to/file
 	Topen <tag> <fid> O_READ
 	Tread <fid> 0 0xFFFF
