@@ -134,3 +134,11 @@ The pipe is more difficult than it appears on the surface:
 # Write
 - Wait for a Tread message to appear for your fid.
 - Data to write gets wrapped up in an Rread message.
+
+
+Perfect example of a terrible comment
+// Types that implement the Node interface can be returned by a Handler
+// when a client performs an operation on a file.
+
+It is too technical, and does not tell the user why they would ever want to
+implement the Node interface.

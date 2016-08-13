@@ -18,8 +18,8 @@ type dialee interface {
 
 type testLogger testing.T
 
-func (t *testLogger) Output(_ int, s string) {
-	t.Log(s)
+func (t *testLogger) Printf(format string, args ...interface{}) {
+	t.Logf(format, args...)
 }
 
 func sendTraffic(t *testing.T, ln *netutil.PipeListener) {

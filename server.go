@@ -2,14 +2,11 @@ package styx
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
+	"sync"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"aqwari.net/net/styx/internal/util"
-	"aqwari.net/net/styx/styxserver"
 	"aqwari.net/retry"
 )
 
@@ -17,20 +14,30 @@ import (
 // diagnostic information during a Server's operation.
 // The Logger interface is implemented by *log.Logger.
 type Logger interface {
-	Output(calldepth int, s string)
+	Printf(string, ...interface{})
 }
 
 // A Server defines parameters for running a 9P server. The
 // zero value of a Server is usable as a 9P server, and will
 // use the defaults set by the styx package.
 type Server struct {
-	Addr         string        // Address to listen on, ":9pfs" if empty.
-	WriteTimeout time.Duration // maximum wait before timing out write of the response.
+	// Address to listen on, ":9pfs" if empty.
+	Addr string
 
-	IdleTimeout time.Duration // maximum wait before closing an idle connection.
-	MaxSize     int64         // maximum size of a 9P message, DefaultMsize if unset.
-	TLSConfig   *tls.Config   // optional TLS config, used by ListenAndServeTLS
-	Handler     Handler       // Default handler to invoke, DefaultServeMux if nil
+	// maximum wait before timing out write of the response.
+	WriteTimeout time.Duration
+
+	// maximum wait before closing an idle connection.
+	IdleTimeout time.Duration
+
+	// maximum size of a 9P message, DefaultMsize if unset.
+	MaxSize int64
+
+	// optional TLS config, used by ListenAndServeTLS
+	TLSConfig *tls.Config
+
+	// Default handler to invoke, Defaultwwwww if nil
+	Handler Handler
 
 	// Auth is used to authenticate user sessions. If nil,
 	// authentication is disabled.
@@ -43,24 +50,67 @@ type Server struct {
 	ErrorLog, TraceLog Logger
 }
 
+// A ServeMux routes requests to specific paths or subtrees to registered
+// handlers.
+type ServeMux struct {
+	m  map[string]Handler
+	mu sync.RWMutex
+}
+
+// NewServeMux initializes an empty ServeMux.
+func NewServeMux() *ServeMux {
+	return &ServeMux{
+		m: make(map[string]Handler),
+	}
+}
+
+var DefaultServeMux = NewServeMux()
+
+// Serve9P reads incoming requests for a Session. If the path of an
+// operation matches a pattern registered in the ServeMux, the request
+// is forwarded to the handler for that pattern. Otherwise, ServeMux
+// responds as if the files did not exist.
+func (mux *ServeMux) Serve9P(s *Session) {
+	for range s.Requests {
+		// TODO
+	}
+}
+
+// Handle registers a Handler to receive requests for files whose
+// name matches prefix.
+func (mux *ServeMux) Handle(prefix string, handler Handler) {
+	panic("TODO")
+}
+
 // Types implementing the Handler interface can be registered to receive
 // 9P requests to a specific path or subtree in the 9P server.
 type Handler interface {
+	Serve9P(*Session)
 }
 
-func (s *Server) debug() bool {
+type HandlerFunc func(s *Session)
+
+func (fn HandlerFunc) Serve9P(s *Session) {
+	fn(s)
+}
+
+func HandleFunc(prefix string, fn HandlerFunc) {
+	DefaultServeMux.Handle(prefix, fn)
+}
+
+func (s *Server) isDebug() bool {
 	return s.TraceLog != nil
 }
 
 func (s *Server) debugf(format string, v ...interface{}) {
 	if s.TraceLog != nil {
-		s.TraceLog.Output(2, fmt.Sprintf(format, v...))
+		s.TraceLog.Printf(format, v...)
 	}
 }
 
 func (s *Server) logf(format string, v ...interface{}) {
 	if s.ErrorLog != nil {
-		s.ErrorLog.Output(2, fmt.Sprintf(format, v...))
+		s.ErrorLog.Printf(format, v...)
 	}
 }
 
@@ -68,7 +118,7 @@ func (s *Server) logf(format string, v ...interface{}) {
 // goroutine for each. The service goroutines read requests and then
 // call srv.Handler to reply to them.
 func (srv *Server) Serve(l net.Listener) error {
-	backoff := retry.Exponential(time.Millisecond).Max(time.Second)
+	backoff := retry.Exponential(time.Millisecond * 10).Max(time.Second)
 	try := 0
 
 	for {
@@ -84,16 +134,10 @@ func (srv *Server) Serve(l net.Listener) error {
 		} else {
 			try = 0
 		}
-		c := styxserver.NewConn(rwc, srv.MaxSize)
-		go func() {
-			srv.debugf("accepted connection from %s", rwc.RemoteAddr())
-			cx := context.WithValue(context.Background(), "conn", rwc)
-			conn := newConn(srv, cx)
-			err := styxserver.Serve(c, cx, conn)
-			if err != nil {
-				srv.logf("error serving %s: %s", rwc.RemoteAddr(), err)
-			}
-		}()
+
+		srv.debugf("accepted connection from %s", rwc.RemoteAddr())
+		conn := newConn(srv, rwc)
+		go conn.serve()
 	}
 }
 
