@@ -70,6 +70,27 @@ func (m *Map) Fetch(key, v interface{}) bool {
 	return false
 }
 
+// Update stores the Map value corresponding with key into v,
+// and then calls fn. Once fn is returned, v is copied back into
+// the Map under key. All other access to the Map is blocked
+// until Update returns. If there is no value in the Map associated
+// with key, fn is not called and Update returns false.
+//
+// v must be a pointer to the same type as the item retrieved
+// from the Map, or a run-time panic will occur.
+func (m *Map) Update(key, v interface{}, fn func()) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	val, ok := m.values[key]
+	if ok {
+		reflect.ValueOf(v).Elem().Set(reflect.ValueOf(val))
+		fn()
+		m.values[key] = reflect.ValueOf(v).Elem().Interface()
+	}
+	return ok
+}
+
 // Do calls f while holding the write lock for a Map.
 func (m *Map) Do(f func(map[interface{}]interface{})) {
 	m.mu.Lock()

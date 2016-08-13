@@ -29,4 +29,17 @@ func TestMap(t *testing.T) {
 	} else if s != "bundle" {
 		t.Error("m.Fetch updated return value for nil entry")
 	}
+
+	var x int
+	ok := m.Update("foo", &x, func() {
+		x++
+	})
+	if !ok {
+		t.Error("m.Update did not find \"foo\" in map")
+	}
+	if !m.Fetch("foo", &x) {
+		t.Error("m.Fetch did not find \"foo\" in map")
+	} else if x != 83 {
+		t.Error("m.Update did not update value for \"foo\" (%v)", x)
+	}
 }
