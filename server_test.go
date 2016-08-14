@@ -22,7 +22,7 @@ func (t *testLogger) Printf(format string, args ...interface{}) {
 	t.Logf(format, args...)
 }
 
-func sendTraffic(t *testing.T, ln *netutil.PipeListener) {
+func sendClientTraffic(t *testing.T, ln *netutil.PipeListener) {
 	c, err := ln.Dial()
 	if err != nil {
 		t.Error(err)
@@ -43,7 +43,7 @@ func sendTraffic(t *testing.T, ln *netutil.PipeListener) {
 	d := styxproto.NewDecoder(c)
 	for d.Next() {
 		for _, msg := range d.Messages() {
-			t.Logf("→ %s", msg)
+			t.Logf("%d %s", msg.Tag(), msg)
 		}
 	}
 	if d.Err() != nil {
@@ -62,5 +62,33 @@ func TestServerBasic(t *testing.T) {
 	go func() {
 		t.Log(srv.Serve(&ln))
 	}()
-	sendTraffic(t, &ln)
+	sendClientTraffic(t, &ln)
+}
+
+func TestEchoServer(t *testing.T) {
+	mux := NewServeMux()
+	srv := Server{
+		ErrorLog: (*testLogger)(t),
+		TraceLog: (*testLogger)(t),
+		Handler:  mux,
+	}
+	var ln netutil.PipeListener
+	defer ln.Close()
+
+	mux.HandleFunc("/", func(s *Session) {
+		for msg := range s.Requests {
+			t.Logf("%T %s", msg, msg.Path())
+			switch msg := msg.(type) {
+			case Topen:
+				file, _ := os.Open(os.DevNull)
+				msg.Ropen(file, 0666)
+			default:
+				msg.defaultResponse()
+			}
+		}
+	})
+	go func() {
+		t.Log(srv.Serve(&ln))
+	}()
+	sendClientTraffic(t, &ln)
 }

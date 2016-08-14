@@ -98,7 +98,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	// Cannot use "opened" (ready for IO) fids for walking; see
 	// walk(5) in 9P manual.
 	if file.rwc != nil {
-		s.conn.Rerror(msg.Tag(), "Fid %q is open for IO; cannot use for Twalk", file.name)
+		s.conn.Rerror(msg.Tag(), "file %s is open for IO; cannot use for Twalk", file.name)
 		return false
 	}
 
@@ -135,7 +135,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	s.Requests <- Twalk{
 		newfid:  newfid,
 		newpath: newpath,
-		reqInfo: newReqInfo(cx, s, msg, file),
+		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
 }
@@ -144,7 +144,7 @@ func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file
 	flag := openFlag(msg.Mode())
 	s.Requests <- Topen{
 		Flag:    flag,
-		reqInfo: newReqInfo(cx, s, msg, file),
+		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
 }
@@ -159,21 +159,21 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 		Name:    string(msg.Name()),
 		Perm:    fileMode(msg.Perm()),
 		Flag:    openFlag(msg.Mode()),
-		reqInfo: newReqInfo(cx, s, msg, file),
+		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
 }
 
 func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file file) bool {
 	s.Requests <- Tremove{
-		reqInfo: newReqInfo(cx, s, msg, file),
+		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
 }
 
 func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file) bool {
 	s.Requests <- Tstat{
-		reqInfo: newReqInfo(cx, s, msg, file),
+		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
 }
@@ -181,14 +181,14 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
 	s.Requests <- Twstat{
 		Stat:    nil,
-		reqInfo: newReqInfo(cx, s, msg, file),
+		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
 }
 
 func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file) bool {
 	if file.rwc == nil {
-		s.conn.Rerror(msg.Tag(), "file %q is not open for reading", file.name)
+		s.conn.Rerror(msg.Tag(), "file %s is not open for reading", file.name)
 		return false
 	}
 

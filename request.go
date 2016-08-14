@@ -58,14 +58,14 @@ func (info reqInfo) Rerror(format string, args ...interface{}) {
 	info.session.conn.Rerror(info.tag, format, args...)
 }
 
-func newReqInfo(cx context.Context, s *Session, msg fcall, f file) reqInfo {
+func newReqInfo(cx context.Context, s *Session, msg fcall, filepath string) reqInfo {
 	return reqInfo{
 		session: s,
 		tag:     msg.Tag(),
 		fid:     msg.Fid(),
 		Context: cx,
 		msg:     msg,
-		path:    f.name,
+		path:    filepath,
 	}
 }
 

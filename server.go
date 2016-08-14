@@ -3,6 +3,7 @@ package styx
 import (
 	"crypto/tls"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,6 +65,9 @@ func NewServeMux() *ServeMux {
 	}
 }
 
+// DefaultServeMux is the default Handler for the styx package.
+// The package-level Handle and HandleFunc functions register
+// new handlers in DefaultServeMux.
 var DefaultServeMux = NewServeMux()
 
 // Serve9P reads incoming requests for a Session. If the path of an
@@ -71,15 +75,66 @@ var DefaultServeMux = NewServeMux()
 // is forwarded to the handler for that pattern. Otherwise, ServeMux
 // responds as if the files did not exist.
 func (mux *ServeMux) Serve9P(s *Session) {
-	for range s.Requests {
-		// TODO
+	mux.mu.RLock()
+	handlers := make(map[string]chan Request, len(mux.m))
+	for pattern, handler := range mux.m {
+		sc := new(Session)
+		*sc = *s
+		sc.Requests = make(chan Request)
+		handlers[pattern] = sc.Requests
+		defer close(sc.Requests)
+		go handler.Serve9P(sc)
+	}
+	mux.mu.RUnlock()
+	for msg := range s.Requests {
+		if c, ok := matchHandler(handlers, msg.Path()); ok {
+			c <- msg
+		} else {
+			msg.defaultResponse()
+		}
+	}
+	for _, c := range handlers {
+		close(c)
 	}
 }
 
+func matchHandler(m map[string]chan Request, s string) (chan Request, bool) {
+	var match string
+	for k := range m {
+		if pathMatch(k, s) && len(match) < len(k) {
+			match = k
+		}
+	}
+	if len(match) > 0 {
+		return m[match], true
+	}
+	return nil, false
+}
+
+func pathMatch(pattern, name string) bool {
+	if !strings.HasPrefix(name, pattern) {
+		return false
+	}
+	if strings.HasSuffix(pattern, "/") {
+		return true
+	}
+	return pattern == name
+}
+
 // Handle registers a Handler to receive requests for files whose
-// name matches prefix.
-func (mux *ServeMux) Handle(prefix string, handler Handler) {
-	panic("TODO")
+// name matches pattern. Registering a handler for the same
+// pattern twice results in a run-time panic.
+func (mux *ServeMux) Handle(pattern string, handler Handler) {
+	mux.mu.Lock()
+	defer mux.mu.Unlock()
+	if _, ok := mux.m[pattern]; ok {
+		panic("Handler for \"" + pattern + "\" defined twice")
+	}
+	mux.m[pattern] = handler
+}
+
+func (mux *ServeMux) HandleFunc(pattern string, fn func(*Session)) {
+	mux.Handle(pattern, HandlerFunc(fn))
 }
 
 // Types implementing the Handler interface can be registered to receive
@@ -94,8 +149,8 @@ func (fn HandlerFunc) Serve9P(s *Session) {
 	fn(s)
 }
 
-func HandleFunc(prefix string, fn HandlerFunc) {
-	DefaultServeMux.Handle(prefix, fn)
+func HandleFunc(prefix string, fn func(s *Session)) {
+	DefaultServeMux.HandleFunc(prefix, fn)
 }
 
 func (s *Server) isDebug() bool {
