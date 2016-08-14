@@ -46,26 +46,26 @@ type reqInfo struct {
 	fid     uint32
 	session *Session
 	msg     styxproto.Msg
-	file    *file
+	path    string
 }
 
 // Path returns the absolute path of the file being operated on.
 func (info reqInfo) Path() string {
-	return info.file.name
+	return info.path
 }
 
 func (info reqInfo) Rerror(format string, args ...interface{}) {
 	info.session.conn.Rerror(info.tag, format, args...)
 }
 
-func newReqInfo(cx context.Context, s *Session, msg fcall, f *file) reqInfo {
+func newReqInfo(cx context.Context, s *Session, msg fcall, f file) reqInfo {
 	return reqInfo{
 		session: s,
 		tag:     msg.Tag(),
 		fid:     msg.Fid(),
 		Context: cx,
 		msg:     msg,
-		file:    f,
+		path:    f.name,
 	}
 }
 
@@ -129,7 +129,10 @@ type Topen struct {
 }
 
 func (t Topen) Ropen(rwc io.ReadWriteCloser, mode os.FileMode) {
-	t.file.rwc = rwc
+	var file file
+	t.session.files.Update(t.fid, &file, func() {
+		file.rwc = rwc
+	})
 	qid := t.session.conn.qid(t.Path(), qidType(mode))
 	t.session.conn.Ropen(t.tag, qid, 0)
 }
@@ -151,13 +154,14 @@ type Twalk struct {
 // the final element in nwelem. We're not taking info for the
 // intermediates from the user, instead assuming QTDIR.
 // Is that correct in every case?
+
 func (t Twalk) Rwalk(exists bool, mode os.FileMode) {
 	if !exists {
 		t.defaultResponse()
 		return
 	}
 
-	t.session.files.Put(t.newfid, &file{name: t.newpath})
+	t.session.files.Put(t.newfid, file{name: t.newpath})
 	t.session.conn.sessionFid.Put(t.newfid, t.session)
 	t.session.IncRef()
 
@@ -212,9 +216,10 @@ func (t Tstat) defaultResponse() {
 }
 
 // A Tcreate message is sent when a client wants to create a new file
-// and open it with the provided Mode.
+// and open it with the provided Mode. The Path method of a Tcreate
+// message returns the absolute path of the containing directory. A user
+// must have write permissions in the directory to create a file.
 type Tcreate struct {
-	Dir  string      // absolute path of the parent directory
 	Name string      // name of the file to create
 	Perm os.FileMode // permissions and file type to create
 	Flag int         // flags to open the new file with
@@ -222,11 +227,11 @@ type Tcreate struct {
 }
 
 func (t Tcreate) Rcreate(rwc io.ReadWriteCloser) {
-	file := file{name: path.Join(t.Dir, t.Name), rwc: rwc}
+	file := file{name: path.Join(t.Path(), t.Name), rwc: rwc}
 
 	// fid for parent directory is now the fid for the new file,
 	// so there is no increase in references to this session.
-	t.session.files.Put(t.fid, &file)
+	t.session.files.Put(t.fid, file)
 
 	qtype := qidType(t.Perm)
 	qid := t.session.conn.qid(file.name, qtype)
@@ -240,14 +245,13 @@ func (t Tcreate) defaultResponse() {
 // A Tremove message is sent when a client wants to delete a file
 // from the server.
 type Tremove struct {
-	file *file
 	reqInfo
 }
 
 func (t Tremove) Rremove() {
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
-	t.session.conn.qids.Del(t.file.name)
+	t.session.conn.qids.Del(t.Path())
 	t.session.conn.Rremove(t.tag)
 	if !t.session.DecRef() {
 		t.session.close()

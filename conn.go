@@ -171,6 +171,7 @@ func (c *conn) serve() {
 Loop:
 	for c.Next() {
 		for _, m := range c.Messages() {
+			c.srv.debugf("%d %s", m.Tag(), m)
 			if !c.handleMessage(m) {
 				break Loop
 			}
@@ -216,6 +217,7 @@ func (c *conn) acceptTversion() bool {
 Loop:
 	for c.Next() {
 		for _, m := range c.Messages() {
+			c.srv.debugf("%d %s", m.Tag(), m)
 			tver, ok := m.(styxproto.Tversion)
 			if !ok {
 				c.Rerror(m.Tag(), "need Tversion")
@@ -277,8 +279,8 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 		return false
 	}
 
-	file := s.fetchFile(msg.Fid())
-	if file == nil {
+	file, ok := s.fetchFile(msg.Fid())
+	if !ok {
 		panic("bug: fid in session map, but no file associated")
 		return false
 	}

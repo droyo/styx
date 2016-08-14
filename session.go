@@ -62,8 +62,8 @@ func newSession(c *conn, m styxproto.Tattach) *Session {
 		Requests: make(chan Request),
 	}
 	c.sessionFid.Put(m.Fid(), s)
-	s.files.Put(m.Fid(), &file{name: "/", rwc: nil})
 	s.IncRef()
+	s.files.Put(m.Fid(), file{name: "/", rwc: nil})
 	return s
 }
 
@@ -84,15 +84,14 @@ func openFlag(mode uint8) int {
 	return flag
 }
 
-func (s *Session) fetchFile(fid uint32) *file {
-	var file *file
-	if s.files.Fetch(fid, &file) {
-		return file
+func (s *Session) fetchFile(fid uint32) (file, bool) {
+	if v, ok := s.files.Get(fid); ok {
+		return v.(file), true
 	}
-	return nil
+	return file{}, false
 }
 
-func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file *file) bool {
+func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file) bool {
 	newpath := file.name
 	newfid := msg.Newfid()
 
@@ -141,7 +140,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file *fil
 	return true
 }
 
-func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file *file) bool {
+func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file) bool {
 	flag := openFlag(msg.Mode())
 	s.Requests <- Topen{
 		Flag:    flag,
@@ -150,14 +149,13 @@ func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file *fil
 	return true
 }
 
-func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file *file) bool {
+func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file file) bool {
 	qid := s.conn.qid(file.name, 0)
 	if qid.Type()&styxproto.QTDIR == 0 {
 		s.conn.Rerror(msg.Tag(), "not a directory: %q", file.name)
 		return false
 	}
 	s.Requests <- Tcreate{
-		Dir:     file.name,
 		Name:    string(msg.Name()),
 		Perm:    fileMode(msg.Perm()),
 		Flag:    openFlag(msg.Mode()),
@@ -166,22 +164,21 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 	return true
 }
 
-func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file *file) bool {
+func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file file) bool {
 	s.Requests <- Tremove{
-		file:    file,
 		reqInfo: newReqInfo(cx, s, msg, file),
 	}
 	return true
 }
 
-func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file *file) bool {
+func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file) bool {
 	s.Requests <- Tstat{
 		reqInfo: newReqInfo(cx, s, msg, file),
 	}
 	return true
 }
 
-func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file *file) bool {
+func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
 	s.Requests <- Twstat{
 		Stat:    nil,
 		reqInfo: newReqInfo(cx, s, msg, file),
@@ -189,7 +186,7 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file *f
 	return true
 }
 
-func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file *file) bool {
+func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file) bool {
 	if file.rwc == nil {
 		s.conn.Rerror(msg.Tag(), "file %q is not open for reading", file.name)
 		return false
@@ -213,7 +210,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file *fil
 	return true
 }
 
-func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file *file) bool {
+func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file file) bool {
 	if file.rwc == nil {
 		s.conn.Rerror(msg.Tag(), "file %q is not opened for writing", file.name)
 		return false
@@ -228,15 +225,14 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file *f
 	return true
 }
 
-func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file *file) bool {
+func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file file) bool {
 	s.conn.sessionFid.Del(msg.Fid())
-	s.files.Del(msg.Fid())
 	if file.rwc != nil {
 		if err := file.rwc.Close(); err != nil {
 			s.conn.Rerror(msg.Tag(), "close %s: %v", file.name, err)
 		}
-		file.rwc = nil
 	}
+	s.files.Del(msg.Fid())
 	s.conn.Rclunk(msg.Tag())
 	return s.DecRef()
 }
@@ -260,7 +256,7 @@ func (s *Session) cleanupHandler() {
 	s.files.Do(func(m map[interface{}]interface{}) {
 		for fid, v := range m {
 			delete(m, fid)
-			file := v.(*file)
+			file := v.(file)
 			if file.rwc != nil {
 				file.rwc.Close()
 			}

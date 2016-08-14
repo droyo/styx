@@ -142,3 +142,7 @@ Perfect example of a terrible comment
 
 It is too technical, and does not tell the user why they would ever want to
 implement the Node interface.
+
+race condition in *file management. A *file needs a mutex,
+or we should store the concrete type in the map, instead 
+of a pointer to it.
