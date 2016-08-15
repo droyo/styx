@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/context"
 
 	"aqwari.net/net/styx/internal/styxfile"
+	"aqwari.net/net/styx/internal/sys"
 	"aqwari.net/net/styx/styxproto"
 )
 
@@ -214,11 +215,12 @@ type Tstat struct {
 
 func (t Tstat) Rstat(info os.FileInfo) {
 	buf := make([]byte, styxproto.MaxStatLen)
+	uid, gid, muid := sys.FileOwner(info)
 	stat, _, err := styxproto.NewStat(buf,
 		info.Name(), // name
-		"nobody",    // uid (TODO)
-		"nobody",    // guid (TODO)
-		"nobody",    // muid (TODO)
+		uid,
+		gid,
+		muid,
 	)
 	if err != nil {
 		// should never happen
