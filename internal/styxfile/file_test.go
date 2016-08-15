@@ -9,7 +9,9 @@ func compare(t *testing.T, file Interface, offset int64, want string) {
 	buf := make([]byte, 1000)
 	n, err := file.ReadAt(buf, offset)
 	if err != nil {
-		t.Fatal(err)
+		if n == 0 {
+			t.Fatal(err, n)
+		}
 	}
 	got := string(buf[:n])
 	if got != want {
