@@ -292,6 +292,10 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 	if c.srv.Auth == nil {
 		s = newSession(c, m)
 	} else {
+		// TODO(droyo) when a transport-based authentication scheme
+		// is in use, the client should not have to do a Tauth request.
+		// We should call the Auth handler if Afid is NOFID, passing it
+		// a util.BlackHole.
 		if !c.sessionFid.Fetch(s, m.Afid()) {
 			c.Rerror(m.Tag(), "invalid afid %x", m.Afid())
 			return false
