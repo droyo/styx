@@ -2,7 +2,6 @@ package styx
 
 import (
 	"io"
-	"net"
 
 	"golang.org/x/net/context"
 )
@@ -19,10 +18,7 @@ type Channel struct {
 
 // Conn retrieves the underlying io.ReadWriteCloser for a Channel.
 func (ch *Channel) Conn() interface{} {
-	if c, ok := ch.Value("conn").(net.Conn); ok {
-		return c
-	}
-	return nil
+	return ch.Value("conn")
 }
 
 // An AuthFunc is used to authenticate a user to a 9P server. The
