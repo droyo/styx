@@ -40,6 +40,11 @@ type Session struct {
 	// is closed when a session is over.
 	Requests chan Request
 
+	// Sends nil once auth is successful, err otherwise.
+	// Closed after authentication is complete, so can only
+	// be used once.
+	authC chan error
+
 	// Underlying connection this session takes place on.
 	*conn
 
@@ -53,17 +58,21 @@ type Session struct {
 }
 
 // create a new session and register its fid in the conn.
-func newSession(c *conn, m styxproto.Tattach) *Session {
+type fattach interface {
+	styxproto.Msg
+	Uname() []byte
+	Aname() []byte
+}
+
+func newSession(c *conn, m fattach) *Session {
 	s := &Session{
 		User:     string(m.Uname()),
 		Access:   string(m.Aname()),
 		conn:     c,
 		files:    util.NewMap(),
+		authC:    make(chan error, 1),
 		Requests: make(chan Request),
 	}
-	c.sessionFid.Put(m.Fid(), s)
-	s.IncRef()
-	s.files.Put(m.Fid(), file{name: "/", rwc: nil})
 	return s
 }
 
@@ -92,7 +101,6 @@ func (s *Session) fetchFile(fid uint32) (file, bool) {
 }
 
 func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file) bool {
-	newpath := file.name
 	newfid := msg.Newfid()
 
 	// Cannot use "opened" (ready for IO) fids for walking; see
@@ -124,18 +132,17 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 		return true
 	}
 
-	// TODO(droyo) think about how we're handling '..' here;
-	// the "path" package should cover us but we should be
-	// sure about what happens with bad/evil paths like
-	// ../../../etc/shadow , etc
+	buf := make([][]byte, 0, msg.Nwname())
 	for i := 0; i < msg.Nwname(); i++ {
-		newpath = path.Join(newpath, string(msg.Wname(i)))
+		buf = append(buf, msg.Wname(i))
 	}
 
+	newpath := string(bytes.Join(buf, []byte{'/'}))
 	s.Requests <- Twalk{
-		newfid:  newfid,
-		newpath: newpath,
-		reqInfo: newReqInfo(cx, s, msg, file.name),
+		newfid:    newfid,
+		newpath:   path.Join(file.name, newpath),
+		dirtypath: newpath,
+		reqInfo:   newReqInfo(cx, s, msg, file.name),
 	}
 	return true
 }
@@ -172,6 +179,19 @@ func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file 
 }
 
 func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file) bool {
+	if file.auth {
+		buf := make([]byte, styxproto.MaxStatLen)
+		stat, _, err := styxproto.NewStat(buf, "", "", "", "")
+		if err != nil {
+			// input is not user-controlled, this should
+			// never happen
+			panic(err)
+		}
+		stat.SetMode(styxproto.DMAUTH)
+		stat.SetQid(s.conn.qid("", styxproto.QTAUTH))
+		s.conn.Rstat(msg.Tag(), stat)
+		return true
+	}
 	s.Requests <- Tstat{
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
@@ -179,8 +199,10 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 }
 
 func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
+	stat := make(styxproto.Stat, len(msg.Stat()))
+	copy(stat, msg.Stat())
 	s.Requests <- Twstat{
-		Stat:    nil,
+		Stat:    statInfo(stat),
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
@@ -198,15 +220,14 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 	// each message is prefixed with its length. While this is generally a Good
 	// Thing, this means we can't write directly to the connection, because
 	// we don't know how much we are going to write until it's too late.
-	var buf bytes.Buffer
+	buf := make([]byte, int(msg.Count()))
 
-	// TODO(droyo) handle offset
-	// TODO(droyo) handle cancellation
-	_, err := io.CopyN(&buf, file.rwc, msg.Count())
+	// TODO(droyo) cancellation
+	_, err := file.rwc.ReadAt(buf, msg.Offset())
 	if err != nil {
 		s.conn.Rerror(msg.Tag(), "%v", err)
 	}
-	s.conn.Rread(msg.Tag(), buf.Bytes())
+	s.conn.Rread(msg.Tag(), buf)
 	return true
 }
 
@@ -215,9 +236,10 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 		s.conn.Rerror(msg.Tag(), "file %q is not opened for writing", file.name)
 		return false
 	}
-	// TODO(droyo): handle offset
+
 	// TODO(droyo): handle cancellation
-	n, err := io.Copy(file.rwc, msg)
+	w := util.NewSectionWriter(file.rwc, msg.Offset(), msg.Count())
+	n, err := io.Copy(w, msg)
 	if err != nil {
 		s.conn.Rerror(msg.Tag(), "%v", err)
 	}

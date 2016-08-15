@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync/atomic"
 
+	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 
@@ -111,6 +112,7 @@ func (c *conn) close() error {
 				seen[session] = struct{}{}
 				session.endSession()
 			}
+			// Should probably let the GC take care of this
 			delete(m, k)
 		}
 	})
@@ -243,9 +245,41 @@ Loop:
 	return false
 }
 
+// NOTE(droyo) consider a scenario where a malicious actor connects
+// to the server that repeatedly spams Tauth requests. It can quickly
+// use up resources on the server. Consider the following measures:
+//
+// - rate-limiting Tauth requests
+// - Setting a per-connection session limit
+// - close connections that have not established a session in N seconds
 func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
-	// auth is TODO
-	c.Rerror(m.Tag(), "%s", errNotSupported)
+	if c.srv.Auth == nil {
+		c.Rerror(m.Tag(), "%s", errNotSupported)
+		return true
+	}
+	if _, ok := c.sessionFid.Get(m.Afid()); ok {
+		c.Rerror(m.Tag(), "fid %x in use", m.Afid())
+		return false
+	}
+	client, server := net.Pipe()
+	ch := &Channel{
+		Context:         c.cx,
+		ReadWriteCloser: server,
+	}
+	rwc, err := styxfile.New(client)
+	if err != nil {
+		// This should never happen
+		panic(err)
+	}
+	s := newSession(c, m)
+	go func() {
+		s.authC <- c.srv.Auth(ch, s.User, s.Access)
+		close(s.authC)
+	}()
+
+	c.sessionFid.Put(m.Afid(), s)
+	s.files.Put(m.Afid(), file{rwc: rwc, auth: true})
+	s.IncRef()
 	return true
 }
 
@@ -254,11 +288,32 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 	if c.srv.Handler != nil {
 		handler = c.srv.Handler
 	}
-	s := newSession(c, m)
+	var s *Session
+	if c.srv.Auth == nil {
+		s = newSession(c, m)
+	} else {
+		if !c.sessionFid.Fetch(s, m.Afid()) {
+			c.Rerror(m.Tag(), "invalid afid %x", m.Afid())
+			return false
+		}
+		// From attach(5): The same validated afid may be used for
+		// multiple attach messages with the same uname and aname.
+		if s.User != string(m.Uname()) || s.Access != string(m.Aname()) {
+			c.Rerror(m.Tag(), "afid mismatch for %s on %s", m.Uname(), m.Aname())
+			return false
+		}
+		if err := <-s.authC; err != nil {
+			c.Rerror(m.Tag(), "auth failed: %s", err)
+			return false
+		}
+	}
 	go func() {
 		handler.Serve9P(s)
 		s.cleanupHandler()
 	}()
+	c.sessionFid.Put(m.Fid(), s)
+	s.IncRef()
+	s.files.Put(m.Fid(), file{name: "/", rwc: nil})
 	c.Rattach(m.Tag(), c.qid("/", styxproto.QTDIR))
 	return true
 }
@@ -284,6 +339,26 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 		panic("bug: fid in session map, but no file associated")
 		return false
 	}
+
+	// NOTE(droyo) on security and anonymous users: On a server with
+	// authentication enabled, a client can only ever establish a handle
+	// to the auth file.  At this point, we have checked that the fid
+	// is valid, so *file can only be an auth file if the user has not
+	// completed a Tattach.
+	if file.auth {
+		// Limit the number of request handlers we have to
+		// audit.
+		switch msg := msg.(type) {
+		case styxproto.Twrite:
+		case styxproto.Tread:
+		case styxproto.Tstat:
+		case styxproto.Tclunk:
+		default:
+			c.Rerror(msg.Tag(), "%T not allowed on afid", msg)
+			return false
+		}
+	}
+
 	switch msg := msg.(type) {
 	case styxproto.Twalk:
 		return s.handleTwalk(cx, msg, file)

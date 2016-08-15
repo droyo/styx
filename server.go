@@ -82,19 +82,20 @@ func (mux *ServeMux) Serve9P(s *Session) {
 		*sc = *s
 		sc.Requests = make(chan Request)
 		handlers[pattern] = sc.Requests
-		defer close(sc.Requests)
 		go handler.Serve9P(sc)
 	}
 	mux.mu.RUnlock()
+	defer func() {
+		for _, c := range handlers {
+			close(c)
+		}
+	}()
 	for msg := range s.Requests {
 		if c, ok := matchHandler(handlers, msg.Path()); ok {
 			c <- msg
 		} else {
 			msg.defaultResponse()
 		}
-	}
-	for _, c := range handlers {
-		close(c)
 	}
 }
 

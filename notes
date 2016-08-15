@@ -146,3 +146,15 @@ implement the Node interface.
 race condition in *file management. A *file needs a mutex,
 or we should store the concrete type in the map, instead 
 of a pointer to it.
+
+Sat Aug 13 23:36:56 EDT 2016 TODO
+
+· wqid in Rwalk does not match nwelem in Twalk for non-root
+  and/or convoluted (think ../dir1/dir2/../dir3) paths
+· Ropen parameters are too demanding, rwc should be enough
+· Rwalk parameters (exists, mode) are questionable
+· Request context should be mutable to allow for middleware
+  to effect deadlines/timeouts
+· The `styxproto` package seems pretty solid. The `styx` package,
+  however, is far from that.
+· Twstat needs a copy of the stat structure

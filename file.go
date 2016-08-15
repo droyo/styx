@@ -1,9 +1,11 @@
 package styx
 
-import "io"
+import "aqwari.net/net/styx/internal/styxfile"
 
 type file struct {
-	rwc    io.ReadWriteCloser
-	name   string
-	offset int64
+	rwc  styxfile.Interface
+	name string
+
+	// This is an afid, used for authentication
+	auth bool
 }

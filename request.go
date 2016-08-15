@@ -5,9 +5,11 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
+	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/styxproto"
 )
 
@@ -130,8 +132,17 @@ type Topen struct {
 
 func (t Topen) Ropen(rwc io.ReadWriteCloser, mode os.FileMode) {
 	var file file
+	f, err := styxfile.New(rwc)
+	if err != nil {
+		t.session.conn.srv.logf("%s open %s failed: %s", t.path, err)
+
+		// Don't want to expose too many implementation details
+		// to clients.
+		t.Rerror("open failed")
+		return
+	}
 	t.session.files.Update(t.fid, &file, func() {
-		file.rwc = rwc
+		file.rwc = f
 	})
 	qid := t.session.conn.qid(t.Path(), qidType(mode))
 	t.session.conn.Ropen(t.tag, qid, 0)
@@ -146,7 +157,17 @@ func (t Topen) defaultResponse() {
 type Twalk struct {
 	newfid  uint32
 	newpath string
+	// We have to keep the original path around to give
+	// the client the correct sequence of qids.
+	dirtypath string
 	reqInfo
+}
+
+// Path returns the absolute path of the directory the client
+// is walking to. The path is normalized; all '..' sequences,
+// double slashes, etc are removed.
+func (t Twalk) Path() string {
+	return t.newpath
 }
 
 // NOTE(droyo) This API needs some more thought. An Rwalk
@@ -227,7 +248,13 @@ type Tcreate struct {
 }
 
 func (t Tcreate) Rcreate(rwc io.ReadWriteCloser) {
-	file := file{name: path.Join(t.Path(), t.Name), rwc: rwc}
+	f, err := styxfile.New(rwc)
+	if err != nil {
+		t.session.conn.srv.logf("create %s failed: %s", t.Name, err)
+		t.Rerror("create failed")
+		return
+	}
+	file := file{name: path.Join(t.Path(), t.Name), rwc: f}
 
 	// fid for parent directory is now the fid for the new file,
 	// so there is no increase in references to this session.
@@ -275,4 +302,26 @@ func (t Twstat) Rwstat() {
 
 func (t Twstat) defaultResponse() {
 	t.Rerror("permission denied")
+}
+
+// Make a Stat look like an os.FileInfo
+type statInfo styxproto.Stat
+
+func (s statInfo) Name() string { return string(styxproto.Stat(s).Name()) }
+func (s statInfo) Size() int64  { return styxproto.Stat(s).Length() }
+
+func (s statInfo) Mode() os.FileMode {
+	return fileMode(styxproto.Stat(s).Mode())
+}
+
+func (s statInfo) ModTime() time.Time {
+	return time.Unix(int64(styxproto.Stat(s).Mtime()), 0)
+}
+
+func (s statInfo) IsDir() bool {
+	return styxproto.Stat(s).Mode()&styxproto.DMDIR != 0
+}
+
+func (s statInfo) Sys() interface{} {
+	return styxproto.Stat(s)
 }
