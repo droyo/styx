@@ -131,9 +131,18 @@ type Topen struct {
 	reqInfo
 }
 
-func (t Topen) Ropen(rwc io.ReadWriteCloser, mode os.FileMode) {
-	var file file
-	f, err := styxfile.New(rwc)
+func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
+	var (
+		file file
+		f    styxfile.Interface
+		err  error
+	)
+	if dir, ok := rwc.(Directory); ok && mode.IsDir() {
+		f = styxfile.NewDir(dir, t.session.conn.qidpool)
+	} else {
+		f, err = styxfile.New(rwc)
+	}
+
 	if err != nil {
 		t.session.conn.srv.logf("%s open %s failed: %s", t.path, err)
 
@@ -250,7 +259,15 @@ type Tcreate struct {
 }
 
 func (t Tcreate) Rcreate(rwc io.ReadWriteCloser) {
-	f, err := styxfile.New(rwc)
+	var (
+		f   styxfile.Interface
+		err error
+	)
+	if dir, ok := rwc.(Directory); t.Perm.IsDir() && ok {
+		f = styxfile.NewDir(dir, t.session.conn.qidpool)
+	} else {
+		f, err = styxfile.New(rwc)
+	}
 	if err != nil {
 		t.session.conn.srv.logf("create %s failed: %s", t.Name, err)
 		t.Rerror("create failed")
@@ -280,7 +297,7 @@ type Tremove struct {
 func (t Tremove) Rremove() {
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
-	t.session.conn.qids.Del(t.Path())
+	t.session.conn.qidpool.Del(t.Path())
 	t.session.conn.Rremove(t.tag)
 	if !t.session.DecRef() {
 		t.session.close()

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync/atomic"
 
+	"aqwari.net/net/styx/internal/qidpool"
 	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
@@ -70,8 +70,7 @@ type conn struct {
 	sessionFid *util.Map
 
 	// Qids for the file tree, added on-demand.
-	qids    *util.Map
-	qidPath uint64
+	qidpool *qidpool.Pool
 
 	// used to implement request cancellation when a Tflush
 	// message is received.
@@ -138,19 +137,12 @@ func newConn(srv *Server, rwc io.ReadWriteCloser) *conn {
 		msize:      msize,
 		sessionFid: util.NewMap(),
 		pendingReq: make(map[uint16]context.CancelFunc),
-		qids:       util.NewMap(),
+		qidpool:    qidpool.New(),
 	}
 }
 
 func (c *conn) qid(name string, qtype uint8) styxproto.Qid {
-	buf := make([]byte, styxproto.QidLen)
-	qpath := atomic.AddUint64(&c.qidPath, 1)
-	qid, _, err := styxproto.NewQid(buf, qtype, 0, qpath)
-	if err != nil {
-		// This should *never* happen
-		panic(err)
-	}
-	return qid
+	return c.qidpool.Put(name, qtype)
 }
 
 // All request contexts must have their cancel functions
