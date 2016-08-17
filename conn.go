@@ -180,7 +180,6 @@ func (c *conn) handleMessage(m styxproto.Msg) bool {
 	}
 	cx, cancel := context.WithCancel(c.cx)
 	c.pendingReq[m.Tag()] = cancel
-	defer c.clearTag(m.Tag())
 
 	switch m := m.(type) {
 	case styxproto.Tauth:
@@ -194,6 +193,7 @@ func (c *conn) handleMessage(m styxproto.Msg) bool {
 	case styxproto.BadMessage:
 		c.srv.logf("got bad message from %s: %s", c.remoteAddr(), m.Err)
 		c.Rerror(m.Tag(), "bad message: %s", m.Err)
+		c.clearTag(m.Tag())
 		return false
 	default:
 		c.Rerror(m.Tag(), "unexpected %T message", m)
@@ -245,6 +245,7 @@ Loop:
 // - Setting a per-connection session limit
 // - close connections that have not established a session in N seconds
 func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
+	defer c.clearTag(m.Tag())
 	if c.srv.Auth == nil {
 		c.Rerror(m.Tag(), "%s", errNotSupported)
 		return true
@@ -276,6 +277,7 @@ func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
 }
 
 func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
+	defer c.clearTag(m.Tag())
 	var handler Handler = DefaultServeMux
 	if c.srv.Handler != nil {
 		handler = c.srv.Handler
@@ -315,10 +317,11 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 }
 
 func (c *conn) handleTflush(cx context.Context, m styxproto.Tflush) bool {
+	defer c.clearTag(m.Tag())
+
 	oldtag := m.Oldtag()
 	c.clearTag(oldtag)
 
-	defer c.clearTag(m.Tag())
 	c.Rflush(m.Tag())
 	return true
 }
@@ -351,6 +354,7 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 		case styxproto.Tclunk:
 		default:
 			c.Rerror(msg.Tag(), "%T not allowed on afid", msg)
+			c.clearTag(msg.Tag())
 			return false
 		}
 	}

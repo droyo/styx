@@ -107,6 +107,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	// walk(5) in 9P manual.
 	if file.rwc != nil {
 		s.conn.Rerror(msg.Tag(), "file %s is open for IO; cannot use for Twalk", file.name)
+		s.conn.clearTag(msg.Tag())
 		return false
 	}
 
@@ -114,6 +115,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	if newfid != msg.Fid() {
 		if _, ok := s.conn.sessionFid.Get(newfid); ok {
 			s.conn.Rerror(msg.Tag(), "Twalk: fid %x already in use", newfid)
+			s.conn.clearTag(msg.Tag())
 			return false
 		}
 	}
@@ -129,6 +131,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 			s.IncRef()
 		}
 		s.conn.Rwalk(msg.Tag())
+		s.conn.clearTag(msg.Tag())
 		return true
 	}
 
@@ -160,6 +163,7 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 	qid := s.conn.qid(file.name, 0)
 	if qid.Type()&styxproto.QTDIR == 0 {
 		s.conn.Rerror(msg.Tag(), "not a directory: %q", file.name)
+		s.conn.clearTag(msg.Tag())
 		return false
 	}
 	s.Requests <- Tcreate{
@@ -180,6 +184,7 @@ func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file 
 
 func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file) bool {
 	if file.auth {
+		defer s.conn.clearTag(msg.Tag())
 		buf := make([]byte, styxproto.MaxStatLen)
 		stat, _, err := styxproto.NewStat(buf, "", "", "", "")
 		if err != nil {
@@ -209,6 +214,7 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 }
 
 func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file) bool {
+	defer s.conn.clearTag(msg.Tag())
 	if file.rwc == nil {
 		s.conn.Rerror(msg.Tag(), "file %s is not open for reading", file.name)
 		return false
@@ -232,6 +238,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 }
 
 func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file file) bool {
+	defer s.conn.clearTag(msg.Tag())
 	if file.rwc == nil {
 		s.conn.Rerror(msg.Tag(), "file %q is not opened for writing", file.name)
 		return false
@@ -248,6 +255,7 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 }
 
 func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file file) bool {
+	defer s.conn.clearTag(msg.Tag())
 	s.conn.sessionFid.Del(msg.Fid())
 	if file.rwc != nil {
 		if err := file.rwc.Close(); err != nil {

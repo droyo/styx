@@ -58,6 +58,7 @@ func (info reqInfo) Path() string {
 }
 
 func (info reqInfo) Rerror(format string, args ...interface{}) {
+	defer info.session.conn.clearTag(info.tag)
 	info.session.conn.Rerror(info.tag, format, args...)
 }
 
@@ -132,6 +133,7 @@ type Topen struct {
 }
 
 func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
+	defer t.session.conn.clearTag(t.tag)
 	var (
 		file file
 		f    styxfile.Interface
@@ -187,6 +189,7 @@ func (t Twalk) Path() string {
 // Is that correct in every case?
 
 func (t Twalk) Rwalk(exists bool, mode os.FileMode) {
+	defer t.session.conn.clearTag(t.tag)
 	if !exists {
 		t.defaultResponse()
 		return
@@ -223,6 +226,7 @@ type Tstat struct {
 }
 
 func (t Tstat) Rstat(info os.FileInfo) {
+	defer t.session.conn.clearTag(t.tag)
 	buf := make([]byte, styxproto.MaxStatLen)
 	uid, gid, muid := sys.FileOwner(info)
 	stat, _, err := styxproto.NewStat(buf,
@@ -259,6 +263,7 @@ type Tcreate struct {
 }
 
 func (t Tcreate) Rcreate(rwc io.ReadWriteCloser) {
+	defer t.session.conn.clearTag(t.tag)
 	var (
 		f   styxfile.Interface
 		err error
@@ -295,6 +300,7 @@ type Tremove struct {
 }
 
 func (t Tremove) Rremove() {
+	defer t.session.conn.clearTag(t.tag)
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
 	t.session.conn.qidpool.Del(t.Path())
@@ -316,6 +322,7 @@ type Twstat struct {
 }
 
 func (t Twstat) Rwstat() {
+	defer t.session.conn.clearTag(t.tag)
 	t.session.conn.Rwstat(t.tag)
 }
 
