@@ -101,9 +101,13 @@ func marshalStats(files []os.FileInfo, buf []byte, pool *qidpool.Pool) (int, err
 		mode := modePerm(fi.Mode())
 		qtype := uint8(mode >> 24)
 
-		stat.SetAtime(uint32(fi.ModTime().Unix()))
+		stat.SetMtime(uint32(fi.ModTime().Unix()))
+		stat.SetAtime(stat.Mtime())
 		stat.SetLength(fi.Size())
 		stat.SetMode(mode)
+
+		// The []byte-based representation has its perks,
+		// sometimes :D
 		copy(stat.Qid(), pool.Put(fi.Name(), qtype))
 	}
 	return n, err
