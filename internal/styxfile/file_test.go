@@ -2,7 +2,13 @@ package styxfile
 
 import (
 	"bytes"
+	"io"
+	"io/ioutil"
+	"os"
 	"testing"
+
+	"aqwari.net/net/styx/internal/qidpool"
+	"aqwari.net/net/styx/styxproto"
 )
 
 func compare(t *testing.T, file Interface, offset int64, want string) {
@@ -56,4 +62,53 @@ func TestDumb(t *testing.T) {
 	write(t, file, 2, "l")
 	write(t, file, 3, "l")
 	write(t, file, 4, "o")
+}
+
+func TestDirectory(t *testing.T) {
+	dirname, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dirname)
+
+	fd, err := os.Open(dirname)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	for i := 0; i < 10; i++ {
+		f, err := ioutil.TempFile(dirname, "dirtest")
+		if err != nil {
+			t.Error(err)
+		}
+		f.Close()
+	}
+	_, err = ioutil.TempDir(dirname, "dirtest-dir")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	dir := NewDir(fd, qidpool.New())
+
+	// We know that we can read a single Stat by only
+	// asking for 1 * MaxStatLen bytes. This is an implementation
+	// detail that may not be true in the future.
+	buf := make([]byte, styxproto.MaxStatLen)
+	var offset int64
+
+	for {
+		n, err := dir.ReadAt(buf, offset)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Error(err)
+			break
+		}
+		offset += int64(n)
+		stat := styxproto.Stat(buf)
+		t.Logf("%s", stat)
+	}
 }
