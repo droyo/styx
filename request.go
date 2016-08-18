@@ -1,7 +1,6 @@
 package styx
 
 import (
-	"io"
 	"os"
 	"path"
 	"strings"
@@ -262,7 +261,7 @@ type Tcreate struct {
 	reqInfo
 }
 
-func (t Tcreate) Rcreate(rwc io.ReadWriteCloser) {
+func (t Tcreate) Rcreate(rwc interface{}) {
 	defer t.session.conn.clearTag(t.tag)
 	var (
 		f   styxfile.Interface
