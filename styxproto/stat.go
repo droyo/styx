@@ -97,8 +97,9 @@ func NewStat(buf []byte, name, uid, gid, muid string) (Stat, []byte, error) {
 	b = b[2:]
 	b = b[copy(b, muid):]
 
-	buint32(buf[:4], uint32(len(buf)-len(b)))
-	return Stat(buf[:len(buf)-len(b)]), b, nil
+	length := len(buf) - len(b)
+	buint16(buf[:2], uint16(length-2))
+	return Stat(buf[:length]), b, nil
 }
 
 // verifyStat ensures that a Stat structure is valid and safe to use
