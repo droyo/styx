@@ -461,7 +461,7 @@ func parseRstat(dot msg, _ io.Reader) (Msg, error) {
 }
 
 func parseTwstat(dot msg, _ io.Reader) (Msg, error) {
-	stat, _, err := verifyField(dot.Body(), true, 0)
+	stat, _, err := verifyField(dot.Body()[4:], true, 0)
 	if err != nil {
 		return nil, err
 	}
