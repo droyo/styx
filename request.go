@@ -139,7 +139,7 @@ func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 		err  error
 	)
 	if dir, ok := rwc.(Directory); ok && mode.IsDir() {
-		f = styxfile.NewDir(dir, t.session.conn.qidpool)
+		f = styxfile.NewDir(dir, t.Path(), t.session.conn.qidpool)
 	} else {
 		f, err = styxfile.New(rwc)
 	}
@@ -268,7 +268,7 @@ func (t Tcreate) Rcreate(rwc interface{}) {
 		err error
 	)
 	if dir, ok := rwc.(Directory); t.Perm.IsDir() && ok {
-		f = styxfile.NewDir(dir, t.session.conn.qidpool)
+		f = styxfile.NewDir(dir, path.Join(t.Path(), t.Name), t.session.conn.qidpool)
 	} else {
 		f, err = styxfile.New(rwc)
 	}

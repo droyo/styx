@@ -90,7 +90,7 @@ func TestDirectory(t *testing.T) {
 		return
 	}
 
-	dir := NewDir(fd, qidpool.New())
+	dir := NewDir(fd, dirname, qidpool.New())
 
 	// We know that we can read a single Stat by only
 	// asking for 1 * MaxStatLen bytes. This is an implementation

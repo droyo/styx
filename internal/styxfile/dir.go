@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"sync"
 
 	"aqwari.net/net/styx/internal/qidpool"
@@ -26,10 +27,11 @@ type Directory interface {
 
 // NewDir creates a new Interface that converts the return
 // value of a Directory's Readdir method into 9P Stat structures.
-func NewDir(dir Directory, pool *qidpool.Pool) Interface {
+func NewDir(dir Directory, abspath string, pool *qidpool.Pool) Interface {
 	return &dirReader{
 		Directory: dir,
 		pool:      pool,
+		path:      abspath,
 	}
 }
 
@@ -38,6 +40,7 @@ type dirReader struct {
 	offset int64
 	sync.Mutex
 	pool *qidpool.Pool
+	path string
 }
 
 func modePerm(mode os.FileMode) uint32 {
@@ -77,7 +80,7 @@ func (d *dirReader) ReadAt(p []byte, offset int64) (int, error) {
 	}
 
 	files, err := d.Readdir(nstats)
-	n, marshalErr := marshalStats(files, p, d.pool)
+	n, marshalErr := marshalStats(p, files, d.path, d.pool)
 	d.offset += int64(n)
 	if marshalErr != nil {
 		return n, marshalErr
@@ -85,7 +88,7 @@ func (d *dirReader) ReadAt(p []byte, offset int64) (int, error) {
 	return n, err
 }
 
-func marshalStats(files []os.FileInfo, buf []byte, pool *qidpool.Pool) (int, error) {
+func marshalStats(buf []byte, files []os.FileInfo, dir string, pool *qidpool.Pool) (int, error) {
 	var (
 		stat styxproto.Stat
 		n    = 0
@@ -105,10 +108,7 @@ func marshalStats(files []os.FileInfo, buf []byte, pool *qidpool.Pool) (int, err
 		stat.SetAtime(stat.Mtime())
 		stat.SetLength(fi.Size())
 		stat.SetMode(mode)
-
-		// The []byte-based representation has its perks,
-		// sometimes :D
-		copy(stat.Qid(), pool.Put(fi.Name(), qtype))
+		stat.SetQid(pool.Put(path.Join(dir, fi.Name()), qtype))
 	}
 	return n, err
 }
