@@ -105,11 +105,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 
 	// Cannot use "opened" (ready for IO) fids for walking; see
 	// walk(5) in 9P manual.
-	if file.rwc != nil {
-		s.conn.Rerror(msg.Tag(), "file %s is open for IO; cannot use for Twalk", file.name)
-		s.conn.clearTag(msg.Tag())
-		return false
-	}
+	file.rwc = nil
 
 	// newfid must be unused or equal to fid
 	if newfid != msg.Fid() {
