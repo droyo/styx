@@ -262,7 +262,10 @@ func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file fi
 	}
 	s.files.Del(msg.Fid())
 	s.conn.Rclunk(msg.Tag())
-	return s.DecRef()
+	if !s.DecRef() {
+		s.endSession()
+	}
+	return true
 }
 
 // Called when there are no more fids associated with this
