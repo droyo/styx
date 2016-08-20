@@ -298,7 +298,8 @@ func (enc *Encoder) Rread(tag uint16, data []byte) (n int, err error) {
 		msize = MinBufSize
 	}
 	msize -= int64(minSizeLUT[msgRread])
-	for len(data) > 0 {
+	for first := true ; first || len(data) > 0; {
+		first = false
 		chunk := data
 		if int64(len(data)) > msize {
 			chunk = data[:msize]

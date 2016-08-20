@@ -225,11 +225,13 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 	buf := make([]byte, int(msg.Count()))
 
 	// TODO(droyo) cancellation
-	_, err := file.rwc.ReadAt(buf, msg.Offset())
-	if err != nil {
+	n, err := file.rwc.ReadAt(buf, msg.Offset())
+
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		s.conn.Rerror(msg.Tag(), "%v", err)
+	} else {
+		s.conn.Rread(msg.Tag(), buf[:n])
 	}
-	s.conn.Rread(msg.Tag(), buf)
 	return true
 }
 
