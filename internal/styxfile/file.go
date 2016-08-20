@@ -1,3 +1,5 @@
+// Package styxfile provides helper routines and interfaces
+// for serving 9P files from Go types.
 package styxfile
 
 import (
