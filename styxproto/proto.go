@@ -468,7 +468,7 @@ func (m Tread) String() string {
 // The data portion of an Rread message can be consumed using the io.Reader
 // interface.
 type Rread struct {
-	r io.Reader
+	r   io.Reader
 	msg msg // headers plus any extra buffered data
 }
 
@@ -493,7 +493,7 @@ func (m Rread) String() string { return fmt.Sprintf("Rread count=%d", m.Count())
 // The data portion of a Twrite request can be accessed via the
 // io.Reader interface.
 type Twrite struct {
-	r io.Reader
+	r   io.Reader
 	msg msg // headers plus any extra buffered data
 }
 
