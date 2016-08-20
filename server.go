@@ -154,16 +154,6 @@ func HandleFunc(prefix string, fn func(s *Session)) {
 	DefaultServeMux.HandleFunc(prefix, fn)
 }
 
-func (s *Server) isDebug() bool {
-	return s.TraceLog != nil
-}
-
-func (s *Server) debugf(format string, v ...interface{}) {
-	if s.TraceLog != nil {
-		s.TraceLog.Printf(format, v...)
-	}
-}
-
 func (s *Server) logf(format string, v ...interface{}) {
 	if s.ErrorLog != nil {
 		s.ErrorLog.Printf(format, v...)
@@ -191,7 +181,6 @@ func (srv *Server) Serve(l net.Listener) error {
 			try = 0
 		}
 
-		srv.debugf("accepted connection from %s", rwc.RemoteAddr())
 		conn := newConn(srv, rwc)
 		go conn.serve()
 	}

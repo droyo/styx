@@ -62,6 +62,21 @@ type Msg interface {
 	bytes() []byte
 }
 
+// Write writes the 9P protocol message to w. It returns
+// the number of bytes written, along with any errors.
+func Write(w io.Writer, m Msg) (written int64, err error) {
+	n, err := w.Write(m.bytes())
+	switch m := m.(type) {
+	case Rread:
+		written, err = io.Copy(w, m)
+		return written + int64(n), err
+	case Twrite:
+		written, err = io.Copy(w, m)
+		return written + int64(n), err
+	}
+	return int64(n), err
+}
+
 // The version request negotiates the protocol version and message
 // size to be used on the connection and initializes the connection
 // for I/O.  Tversion must be the first message sent on the 9P connection,

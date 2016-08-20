@@ -9,6 +9,7 @@ import (
 
 	"aqwari.net/net/styx/internal/qidpool"
 	"aqwari.net/net/styx/internal/styxfile"
+	"aqwari.net/net/styx/internal/tracing"
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 
@@ -128,9 +129,22 @@ func newConn(srv *Server, rwc io.ReadWriteCloser) *conn {
 			msize = styxproto.MinBufSize
 		}
 	}
+	var enc *styxproto.Encoder
+	var dec *styxproto.Decoder
+	if srv.TraceLog != nil {
+		enc = tracing.Encoder(rwc, func(m styxproto.Msg) {
+			srv.TraceLog.Printf("← %03d %s", m.Tag(), m)
+		})
+		dec = tracing.Decoder(rwc, func(m styxproto.Msg) {
+			srv.TraceLog.Printf("→ %03d %s", m.Tag(), m)
+		})
+	} else {
+		enc = styxproto.NewEncoder(rwc)
+		dec = styxproto.NewDecoder(rwc)
+	}
 	return &conn{
-		Decoder:    styxproto.NewDecoder(rwc),
-		Encoder:    styxproto.NewEncoder(rwc),
+		Decoder:    dec,
+		Encoder:    enc,
 		srv:        srv,
 		rwc:        rwc,
 		cx:         context.TODO(),
@@ -165,7 +179,6 @@ func (c *conn) serve() {
 Loop:
 	for c.Next() {
 		for _, m := range c.Messages() {
-			c.srv.debugf("%d %s", m.Tag(), m)
 			if !c.handleMessage(m) {
 				break Loop
 			}
@@ -211,7 +224,6 @@ func (c *conn) acceptTversion() bool {
 Loop:
 	for c.Next() {
 		for _, m := range c.Messages() {
-			c.srv.debugf("%d %s", m.Tag(), m)
 			tver, ok := m.(styxproto.Tversion)
 			if !ok {
 				c.Rerror(m.Tag(), "need Tversion")
