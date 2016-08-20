@@ -228,12 +228,11 @@ func (t Tstat) Rstat(info os.FileInfo) {
 	defer t.session.conn.clearTag(t.tag)
 	buf := make([]byte, styxproto.MaxStatLen)
 	uid, gid, muid := sys.FileOwner(info)
-	stat, _, err := styxproto.NewStat(buf,
-		info.Name(), // name
-		uid,
-		gid,
-		muid,
-	)
+	name := info.Name()
+	if name == "/" {
+		name = "."
+	}
+	stat, _, err := styxproto.NewStat(buf, name, uid, gid, muid)
 	if err != nil {
 		// should never happen
 		panic(err)

@@ -324,7 +324,7 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 	c.sessionFid.Put(m.Fid(), s)
 	s.IncRef()
 	s.files.Put(m.Fid(), file{name: "/", rwc: nil})
-	c.Rattach(m.Tag(), c.qid("/", styxproto.QTDIR))
+	c.Rattach(m.Tag(), c.qid(".", styxproto.QTDIR))
 	return true
 }
 
