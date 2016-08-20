@@ -75,7 +75,7 @@ type conn struct {
 
 	// used to implement request cancellation when a Tflush
 	// message is received.
-	pendingReq map[uint16]context.CancelFunc
+	pendingReq *util.Map
 }
 
 func (c *conn) remoteAddr() net.Addr {
@@ -98,10 +98,12 @@ func (c *conn) sessionByFid(fid uint32) (*Session, bool) {
 // Close the connection
 func (c *conn) close() error {
 	// Cancel all pending requests
-	for tag, cancel := range c.pendingReq {
-		cancel()
-		delete(c.pendingReq, tag)
-	}
+	c.pendingReq.Do(func(m map[interface{}]interface{}) {
+		for tag, cancel := range m {
+			cancel.(context.CancelFunc)()
+			delete(m, tag)
+		}
+	})
 
 	// Close all open files and sessions
 	c.sessionFid.Do(func(m map[interface{}]interface{}) {
@@ -150,7 +152,7 @@ func newConn(srv *Server, rwc io.ReadWriteCloser) *conn {
 		cx:         context.TODO(),
 		msize:      msize,
 		sessionFid: util.NewMap(),
-		pendingReq: make(map[uint16]context.CancelFunc),
+		pendingReq: util.NewMap(),
 		qidpool:    qidpool.New(),
 	}
 }
@@ -162,9 +164,10 @@ func (c *conn) qid(name string, qtype uint8) styxproto.Qid {
 // All request contexts must have their cancel functions
 // called, to free up resources in the context.
 func (c *conn) clearTag(tag uint16) {
-	if cancel, ok := c.pendingReq[tag]; ok {
+	var cancel context.CancelFunc
+	if c.pendingReq.Fetch(tag, &cancel) {
 		cancel()
-		delete(c.pendingReq, tag)
+		c.pendingReq.Del(tag)
 	}
 }
 
@@ -188,12 +191,12 @@ Loop:
 }
 
 func (c *conn) handleMessage(m styxproto.Msg) bool {
-	if _, ok := c.pendingReq[m.Tag()]; ok {
+	if _, ok := c.pendingReq.Get(m.Tag()); ok {
 		c.Rerror(m.Tag(), "%s", errTagInUse)
 		return false
 	}
 	cx, cancel := context.WithCancel(c.cx)
-	c.pendingReq[m.Tag()] = cancel
+	c.pendingReq.Put(m.Tag(), cancel)
 
 	switch m := m.(type) {
 	case styxproto.Tauth:
