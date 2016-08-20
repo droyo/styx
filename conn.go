@@ -209,8 +209,8 @@ func (c *conn) handleMessage(m styxproto.Msg) bool {
 		return c.handleFcall(cx, m)
 	case styxproto.BadMessage:
 		c.srv.logf("got bad message from %s: %s", c.remoteAddr(), m.Err)
-		c.Rerror(m.Tag(), "bad message: %s", m.Err)
 		c.clearTag(m.Tag())
+		c.Rerror(m.Tag(), "bad message: %s", m.Err)
 		return true
 	default:
 		c.Rerror(m.Tag(), "unexpected %T message", m)
@@ -261,12 +261,13 @@ Loop:
 // - Setting a per-connection session limit
 // - close connections that have not established a session in N seconds
 func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
-	defer c.clearTag(m.Tag())
 	if c.srv.Auth == nil {
+		c.clearTag(m.Tag())
 		c.Rerror(m.Tag(), "%s", errNotSupported)
 		return true
 	}
 	if _, ok := c.sessionFid.Get(m.Afid()); ok {
+		c.clearTag(m.Tag())
 		c.Rerror(m.Tag(), "fid %x in use", m.Afid())
 		return false
 	}
@@ -293,7 +294,6 @@ func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
 }
 
 func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
-	defer c.clearTag(m.Tag())
 	var handler Handler = DefaultServeMux
 	if c.srv.Handler != nil {
 		handler = c.srv.Handler
@@ -307,16 +307,19 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 		// We should call the Auth handler if Afid is NOFID, passing it
 		// a util.BlackHole.
 		if !c.sessionFid.Fetch(s, m.Afid()) {
+			c.clearTag(m.Tag())
 			c.Rerror(m.Tag(), "invalid afid %x", m.Afid())
 			return false
 		}
 		// From attach(5): The same validated afid may be used for
 		// multiple attach messages with the same uname and aname.
 		if s.User != string(m.Uname()) || s.Access != string(m.Aname()) {
+			c.clearTag(m.Tag())
 			c.Rerror(m.Tag(), "afid mismatch for %s on %s", m.Uname(), m.Aname())
 			return false
 		}
 		if err := <-s.authC; err != nil {
+			c.clearTag(m.Tag())
 			c.Rerror(m.Tag(), "auth failed: %s", err)
 			return false
 		}
@@ -328,15 +331,14 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 	c.sessionFid.Put(m.Fid(), s)
 	s.IncRef()
 	s.files.Put(m.Fid(), file{name: "/", rwc: nil})
+	c.clearTag(m.Tag())
 	c.Rattach(m.Tag(), c.qid(".", styxproto.QTDIR))
 	return true
 }
 
 func (c *conn) handleTflush(cx context.Context, m styxproto.Tflush) bool {
-	defer c.clearTag(m.Tag())
-
-	oldtag := m.Oldtag()
-	c.clearTag(oldtag)
+	c.clearTag(m.Oldtag())
+	c.clearTag(m.Tag())
 
 	c.Rflush(m.Tag())
 	return true

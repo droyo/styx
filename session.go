@@ -110,8 +110,8 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	// newfid must be unused or equal to fid
 	if newfid != msg.Fid() {
 		if _, ok := s.conn.sessionFid.Get(newfid); ok {
-			s.conn.Rerror(msg.Tag(), "Twalk: fid %x already in use", newfid)
 			s.conn.clearTag(msg.Tag())
+			s.conn.Rerror(msg.Tag(), "Twalk: fid %x already in use", newfid)
 			return false
 		}
 	}
@@ -126,8 +126,8 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 			s.conn.sessionFid.Put(newfid, s)
 			s.IncRef()
 		}
-		s.conn.Rwalk(msg.Tag())
 		s.conn.clearTag(msg.Tag())
+		s.conn.Rwalk(msg.Tag())
 		return true
 	}
 
@@ -180,7 +180,6 @@ func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file 
 
 func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file) bool {
 	if file.auth {
-		defer s.conn.clearTag(msg.Tag())
 		buf := make([]byte, styxproto.MaxStatLen)
 		stat, _, err := styxproto.NewStat(buf, "", "", "", "")
 		if err != nil {
@@ -190,6 +189,7 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 		}
 		stat.SetMode(styxproto.DMAUTH)
 		stat.SetQid(s.conn.qid("", styxproto.QTAUTH))
+		s.conn.clearTag(msg.Tag())
 		s.conn.Rstat(msg.Tag(), stat)
 		return true
 	}
@@ -210,8 +210,8 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 }
 
 func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file) bool {
-	defer s.conn.clearTag(msg.Tag())
 	if file.rwc == nil {
+		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %s is not open for reading", file.name)
 		return false
 	}
@@ -227,6 +227,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 	// TODO(droyo) cancellation
 	n, err := file.rwc.ReadAt(buf, msg.Offset())
 
+	s.conn.clearTag(msg.Tag())
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		s.conn.Rerror(msg.Tag(), "%v", err)
 	} else {
@@ -236,8 +237,8 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 }
 
 func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file file) bool {
-	defer s.conn.clearTag(msg.Tag())
 	if file.rwc == nil {
+		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %q is not opened for writing", file.name)
 		return false
 	}
@@ -245,15 +246,16 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 	// TODO(droyo): handle cancellation
 	w := util.NewSectionWriter(file.rwc, msg.Offset(), msg.Count())
 	n, err := io.Copy(w, msg)
-	if err != nil {
+	s.conn.clearTag(msg.Tag())
+	if n == 0 && err != nil {
 		s.conn.Rerror(msg.Tag(), "%v", err)
+	} else {
+		s.conn.Rwrite(msg.Tag(), n)
 	}
-	s.conn.Rwrite(msg.Tag(), n)
 	return true
 }
 
 func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file file) bool {
-	defer s.conn.clearTag(msg.Tag())
 	s.conn.sessionFid.Del(msg.Fid())
 	if file.rwc != nil {
 		if err := file.rwc.Close(); err != nil {
@@ -261,6 +263,7 @@ func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file fi
 		}
 	}
 	s.files.Del(msg.Fid())
+	s.conn.clearTag(msg.Tag())
 	s.conn.Rclunk(msg.Tag())
 	if !s.DecRef() {
 		s.endSession()

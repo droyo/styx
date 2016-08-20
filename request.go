@@ -57,7 +57,7 @@ func (info reqInfo) Path() string {
 }
 
 func (info reqInfo) Rerror(format string, args ...interface{}) {
-	defer info.session.conn.clearTag(info.tag)
+	info.session.conn.clearTag(info.tag)
 	info.session.conn.Rerror(info.tag, format, args...)
 }
 
@@ -132,7 +132,6 @@ type Topen struct {
 }
 
 func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
-	defer t.session.conn.clearTag(t.tag)
 	var (
 		file file
 		f    styxfile.Interface
@@ -156,6 +155,7 @@ func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 		file.rwc = f
 	})
 	qid := t.session.conn.qid(t.Path(), qidType(mode))
+	t.session.conn.clearTag(t.tag)
 	t.session.conn.Ropen(t.tag, qid, 0)
 }
 
@@ -188,7 +188,6 @@ func (t Twalk) Path() string {
 // Is that correct in every case?
 
 func (t Twalk) Rwalk(exists bool, mode os.FileMode) {
-	defer t.session.conn.clearTag(t.tag)
 	if !exists {
 		t.defaultResponse()
 		return
@@ -210,6 +209,7 @@ func (t Twalk) Rwalk(exists bool, mode os.FileMode) {
 		}
 		dir, _ = path.Split(dir)
 	}
+	t.session.conn.clearTag(t.tag)
 	if err := t.session.conn.Rwalk(t.tag, wqid...); err != nil {
 		panic(err)
 	}
@@ -225,7 +225,6 @@ type Tstat struct {
 }
 
 func (t Tstat) Rstat(info os.FileInfo) {
-	defer t.session.conn.clearTag(t.tag)
 	buf := make([]byte, styxproto.MaxStatLen)
 	uid, gid, muid := sys.FileOwner(info)
 	name := info.Name()
@@ -242,6 +241,7 @@ func (t Tstat) Rstat(info os.FileInfo) {
 	stat.SetAtime(uint32(info.ModTime().Unix())) // TODO: get atime
 	stat.SetMtime(uint32(info.ModTime().Unix()))
 	stat.SetQid(t.session.conn.qid(t.Path(), qidType(info.Mode())))
+	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rstat(t.tag, stat)
 }
 
@@ -261,7 +261,6 @@ type Tcreate struct {
 }
 
 func (t Tcreate) Rcreate(rwc interface{}) {
-	defer t.session.conn.clearTag(t.tag)
 	var (
 		f   styxfile.Interface
 		err error
@@ -284,6 +283,7 @@ func (t Tcreate) Rcreate(rwc interface{}) {
 
 	qtype := qidType(t.Perm)
 	qid := t.session.conn.qid(file.name, qtype)
+	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rcreate(t.tag, qid, 0)
 }
 
@@ -298,10 +298,10 @@ type Tremove struct {
 }
 
 func (t Tremove) Rremove() {
-	defer t.session.conn.clearTag(t.tag)
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
 	t.session.conn.qidpool.Del(t.Path())
+	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rremove(t.tag)
 	if !t.session.DecRef() {
 		t.session.close()
@@ -320,7 +320,7 @@ type Twstat struct {
 }
 
 func (t Twstat) Rwstat() {
-	defer t.session.conn.clearTag(t.tag)
+	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rwstat(t.tag)
 }
 
