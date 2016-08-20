@@ -105,10 +105,18 @@ func NewStat(buf []byte, name, uid, gid, muid string) (Stat, []byte, error) {
 // as a Stat. This *must* be called on all received Stats, otherwise
 // there is no guarantee that a bad actor threw in some illegal sizes
 // or strings.
+//
+// From stat(5):
+//
+// A wstat request can avoid modifying some properties of the file by
+// providing explicit ``don't touch'' values in the stat data that is sent:
+// zero-length strings for text values and the maximum unsigned value of
+// appropriate size for integral values.
 func verifyStat(data []byte) error {
 	var field []byte
 
-	// type[2] dev[4] qid[13] mod[4] atime[4] mtime[4] length[8] name[s] uid[s] gid[s] muid[s]
+	// type[2] dev[4] qid[13] mod[4] atime[4]
+	// mtime[4] length[8] name[s] uid[s] gid[s] muid[s]
 	if len(data) < minStatLen {
 		return errShortStat
 	} else if len(data) > MaxStatLen {
