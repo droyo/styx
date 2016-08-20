@@ -129,7 +129,7 @@ func verifyStat(data []byte) error {
 	name, rest, err := verifyField(data[39:], false, sizeHeaders-2)
 	if err != nil {
 		return err
-	} else if err := verifyString(name); err != nil {
+	} else if err := verifyPathElem(name); err != nil {
 		return err
 	} else if len(name) > MaxFilenameLen {
 		return errLongFilename
