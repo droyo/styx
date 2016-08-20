@@ -20,7 +20,7 @@ func ExampleNewStat() {
 	s.SetMode(0640)
 	fmt.Println(s)
 
-	// Output: size=70 type=0 dev=0 qid="type=0 ver=0 path=0" mode=640 atime=0 mtime=0 length=309 name="messages.log" uid="root" gid="wheel" muid=""
+	// Output: size=68 type=0 dev=0 qid="type=0 ver=0 path=0" mode=640 atime=0 mtime=0 length=309 name="messages.log" uid="root" gid="wheel" muid=""
 }
 
 func ExampleNewQid() {
