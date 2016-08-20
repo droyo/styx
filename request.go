@@ -199,11 +199,11 @@ func (t Twalk) Rwalk(exists bool, mode os.FileMode) {
 	t.session.IncRef()
 
 	qtype := qidType(mode)
-	wqid := make([]styxproto.Qid, strings.Count(t.newpath, "/")+1)
+	wqid := make([]styxproto.Qid, strings.Count(t.dirtypath, "/")+1)
 	wqid[len(wqid)-1] = t.session.conn.qid(t.newpath, qtype)
-	dir, _ := path.Split(t.newpath)
+	dir, _ := path.Split(t.dirtypath)
 	for i := len(wqid) - 2; i >= 0; i-- {
-		wqid[i] = t.session.conn.qid(dir, styxproto.QTDIR)
+		wqid[i] = t.session.conn.qid(path.Clean(dir), styxproto.QTDIR)
 		if wqid[i].Type()&styxproto.QTDIR == 0 {
 			t.Rerror("not a directory: %q", dir)
 			return
