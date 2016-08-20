@@ -167,6 +167,7 @@ func (srv *Server) Serve(l net.Listener) error {
 	backoff := retry.Exponential(time.Millisecond * 10).Max(time.Second)
 	try := 0
 
+	srv.logf("listening on %s", l.Addr())
 	for {
 		rwc, err := l.Accept()
 		if err != nil {
@@ -181,6 +182,7 @@ func (srv *Server) Serve(l net.Listener) error {
 			try = 0
 		}
 
+		srv.logf("accepted connection from %s", rwc.RemoteAddr())
 		conn := newConn(srv, rwc)
 		go conn.serve()
 	}

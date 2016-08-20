@@ -184,6 +184,7 @@ Loop:
 			}
 		}
 	}
+	c.srv.logf("closed connection from %s", c.remoteAddr())
 }
 
 func (c *conn) handleMessage(m styxproto.Msg) bool {
