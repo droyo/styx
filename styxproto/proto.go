@@ -84,7 +84,7 @@ func Write(w io.Writer, m Msg) (written int64, err error) {
 // received the Rversion reply.
 type Tversion []byte
 
-// For version messages, Tag should be styx.NOTAG
+// For version messages, Tag should be NoTag
 func (m Tversion) Tag() uint16 { return msg(m).Tag() }
 
 // Len returns the length of a Tversion request in bytes.
@@ -113,7 +113,7 @@ func (m Tversion) String() string {
 type Rversion []byte
 
 // Tag must return the tag of the corresponding Tversion message,
-// NOTAG.
+// NoTag.
 func (m Rversion) Tag() uint16 { return msg(m).Tag() }
 
 // Len returns the length of the Rversion message in bytes.
@@ -193,7 +193,7 @@ func (m Tattach) Fid() uint32 { return guint32(m[7:11]) }
 
 // On servers that require authentication, afid serves to authenticate a user,
 // and must have been established in a previous Tauth request. If a client
-// does not wish to authenticate, afid should be set to styx.NOFID.
+// does not wish to authenticate, afid should be set to NoFid.
 func (m Tattach) Afid() uint32 { return guint32(m[11:15]) }
 
 // Uname is the user name of the attaching user.
@@ -203,6 +203,10 @@ func (m Tattach) Uname() []byte { return msg(m).nthField(15, 0) }
 func (m Tattach) Aname() []byte { return msg(m).nthField(15, 1) }
 
 func (m Tattach) String() string {
+	if m.Afid() == NoFid {
+		return fmt.Sprintf("Tattach fid=%d afid=NOFID uname=%q aname=%q",
+			m.Fid(), m.Uname(), m.Aname())
+	}
 	return fmt.Sprintf("Tattach fid=%d afid=%d uname=%q aname=%q",
 		m.Fid(), m.Afid(), m.Uname(), m.Aname())
 }
