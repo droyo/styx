@@ -9,8 +9,8 @@ import (
 // DefaultUid and DefaultGid are the default group and owner for a file if
 // ownership information cannot be retrieved.
 const (
-	DefaultUid = "glenda"
-	DefaultGid = "glenda"
+	DefaultUid = ""
+	DefaultGid = ""
 )
 
 type hasUid interface {
