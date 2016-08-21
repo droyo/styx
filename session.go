@@ -147,6 +147,11 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 }
 
 func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file) bool {
+	if file.rwc != nil {
+		s.conn.clearTag(msg.Tag())
+		s.conn.Rerror(msg.Tag(), "fid %d already open", msg.Fid())
+		return true
+	}
 	flag := openFlag(msg.Mode())
 	s.Requests <- Topen{
 		Flag:    flag,
