@@ -66,12 +66,8 @@ type Msg interface {
 // the number of bytes written, along with any errors.
 func Write(w io.Writer, m Msg) (written int64, err error) {
 	n, err := w.Write(m.bytes())
-	switch m := m.(type) {
-	case Rread:
-		written, err = io.Copy(w, m)
-		return written + int64(n), err
-	case Twrite:
-		written, err = io.Copy(w, m)
+	if r, ok := m.(io.Reader); ok {
+		written, err = io.Copy(w, r)
 		return written + int64(n), err
 	}
 	return int64(n), err
