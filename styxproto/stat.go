@@ -123,9 +123,6 @@ func verifyStat(data []byte) error {
 	} else if len(data) > MaxStatLen {
 		return errLongStat
 	}
-	if length := guint64(data[31:39]); length > MaxFileLen {
-		return errLongLength
-	}
 	const sizeHeaders = 2 * 4 // name, uid, gid, muid
 	name, rest, err := verifyField(data[39:], false, sizeHeaders-2)
 	if err != nil {
