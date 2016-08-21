@@ -23,9 +23,9 @@ var minSizeLUT = [...]int{
 	msgRopen:    24,             // size[4] Ropen tag[2] qid[13] iounit[4]
 	msgTcreate:  18,             // size[4] Tcreate tag[2] fid[4] name[s] perm[4] mode[1]
 	msgRcreate:  24,             // size[4] Rcreate tag[2] qid[13] iounit[4]
-	msgTread:    23,             // size[4] Tread tag[2] fid[4] offset[8] count[4]
+	msgTread:    IOHeaderSize,   // size[4] Tread tag[2] fid[4] offset[8] count[4]
 	msgRread:    11,             // size[4] Rread tag[2] count[4] data[count]
-	msgTwrite:   23,             // size[4] Twrite tag[2] fid[4] offset[8] count[4] data[count]
+	msgTwrite:   IOHeaderSize,   // size[4] Twrite tag[2] fid[4] offset[8] count[4] data[count]
 	msgRwrite:   11,             // size[4] Rwrite tag[2] count[4]
 	msgTclunk:   11,             // size[4] Tclunk tag[2] fid[4]
 	msgRclunk:   7,              // size[4] Rclunk tag[2]
@@ -67,6 +67,14 @@ var maxSizeLUT = [...]int{
 	msgTwstat:   minSizeLUT[msgTwstat] + MaxFilenameLen + (MaxUidLen * 3),
 	msgRwstat:   minSizeLUT[msgRwstat],
 }
+
+// IOHeaderSize is the length of all fixed-width fields in a Twrite or Tread
+// message. Twrite and Tread messages are defined as
+//
+// 	size[4] Twrite tag[2] fid[4] offset[8] count[4] data[count]
+// 	size[4] Tread  tag[2] fid[4] offset[8] count[4]
+//
+const IOHeaderSize = 4 + 1 + 2 + 4 + 8 + 4
 
 // MaxVersionLen is the maximum length of the protocol version string in bytes
 const MaxVersionLen = 20
