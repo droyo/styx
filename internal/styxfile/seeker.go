@@ -11,7 +11,6 @@ import (
 // seeks with a lock.
 
 type seekerAt struct {
-	offset int64
 	rwc    io.Seeker
 	sync.Mutex
 }
