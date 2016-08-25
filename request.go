@@ -3,7 +3,6 @@ package styx
 import (
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"golang.org/x/net/context"
@@ -161,62 +160,6 @@ func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 
 func (t Topen) defaultResponse() {
 	t.Rerror("permission denied")
-}
-
-// A Twalk message is sent when a client wants to check that a given
-// file exists. Call its Rwalk method to answer.
-type Twalk struct {
-	newfid  uint32
-	newpath string
-	// We have to keep the original path around to give
-	// the client the correct sequence of qids.
-	dirtypath string
-	reqInfo
-}
-
-// Path returns the absolute path of the directory the client
-// is walking to. The path is normalized; all '..' sequences,
-// double slashes, etc are removed.
-func (t Twalk) Path() string {
-	return t.newpath
-}
-
-// NOTE(droyo) This API needs some more thought. An Rwalk
-// gives back the Qids for the path from the Twalk's fid, to
-// the final element in nwelem. We're not taking info for the
-// intermediates from the user, instead assuming QTDIR.
-// Is that correct in every case?
-
-func (t Twalk) Rwalk(exists bool, mode os.FileMode) {
-	if !exists {
-		t.defaultResponse()
-		return
-	}
-
-	t.session.files.Put(t.newfid, file{name: t.newpath})
-	t.session.conn.sessionFid.Put(t.newfid, t.session)
-	t.session.IncRef()
-
-	qtype := qidType(mode)
-	wqid := make([]styxproto.Qid, strings.Count(t.dirtypath, "/")+1)
-	wqid[len(wqid)-1] = t.session.conn.qid(t.newpath, qtype)
-	dir, _ := path.Split(t.dirtypath)
-	for i := len(wqid) - 2; i >= 0; i-- {
-		wqid[i] = t.session.conn.qid(path.Clean(dir), styxproto.QTDIR)
-		if wqid[i].Type()&styxproto.QTDIR == 0 {
-			t.Rerror("not a directory: %q", dir)
-			return
-		}
-		dir, _ = path.Split(dir)
-	}
-	t.session.conn.clearTag(t.tag)
-	if err := t.session.conn.Rwalk(t.tag, wqid...); err != nil {
-		panic(err)
-	}
-}
-
-func (t Twalk) defaultResponse() {
-	t.Rerror("no such file or directory")
 }
 
 // A Tstat message is sent when a client wants metadata about a file.

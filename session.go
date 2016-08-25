@@ -1,10 +1,10 @@
 package styx
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"path"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -131,17 +131,21 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 		return true
 	}
 
-	buf := make([][]byte, 0, msg.Nwname())
-	for i := 0; i < msg.Nwname(); i++ {
-		buf = append(buf, msg.Wname(i))
+	// see walk.go for more details
+	elem := make([]string, 0, msg.Nwname())
+	for i := 0; i < cap(elem); i++ {
+		elem = append(elem, string(msg.Wname(i)))
 	}
+	newpath := path.Join(file.name, strings.Join(elem, "/"))
+	walker := newWalker(s, msg.Tag(), newfid, newpath, len(elem))
 
-	newpath := string(bytes.Join(buf, []byte{'/'}))
-	s.Requests <- Twalk{
-		newfid:    newfid,
-		newpath:   path.Join(file.name, newpath),
-		dirtypath: newpath,
-		reqInfo:   newReqInfo(cx, s, msg, file.name),
+	for i := range elem {
+		fullpath := path.Join(file.name, strings.Join(elem[:i+1], "/"))
+		s.Requests <- Twalk{
+			index:   i,
+			walk:    walker,
+			reqInfo: newReqInfo(cx, s, msg, fullpath),
+		}
 	}
 	return true
 }
