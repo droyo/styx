@@ -11,8 +11,16 @@ func TestRequests(t *testing.T) {
 	testParseMsgFile(t, "testdata/sample.client.9p")
 }
 
+func TestV9FSRequests(t *testing.T) {
+	testParseMsgFile(t, "testdata/v9fs.client.9p")
+}
+
 func TestResponse(t *testing.T) {
 	testParseMsgFile(t, "testdata/sample.server.9p")
+}
+
+func TestV9FSResponse(t *testing.T) {
+	testParseMsgFile(t, "testdata/v9fs.server.9p")
 }
 
 func testParseMsgFile(t *testing.T, filename string) {

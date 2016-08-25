@@ -123,8 +123,9 @@ func verifyStat(data []byte) error {
 	} else if len(data) > MaxStatLen {
 		return errLongStat
 	}
-	const sizeHeaders = 2 * 4 // name, uid, gid, muid
-	name, rest, err := verifyField(data[39:], false, sizeHeaders-2)
+
+	const sizeHeaders = 2 * 4 // name[s], uid[s], gid[s], muid[s], 2-byte length headers each
+	name, rest, err := verifyField(data[statFixedSize:], false, sizeHeaders-2)
 	if err != nil {
 		return err
 	} else if err := verifyPathElem(name); err != nil {

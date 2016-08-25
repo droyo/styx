@@ -118,8 +118,16 @@ const megabyte = 1 << 20
 // DefaultMaxSize is the default maximum size of a 9P message.
 const DefaultMaxSize = 8 * megabyte
 
-// See stat(5) for layout of a stat structure
-const minStatLen = 49
+// See stat(5) or stat(9P) for details on stat structure
+const statFixedSize = 2 + // size[2]
+	2 + // type[2]
+	4 + // dev[4]
+	13 + // qid[13]
+	4 + // mode[4]
+	4 + // atime[4]
+	4 + // mtime[4]
+						8 // length[8]
+const minStatLen = statFixedSize + (4 * 2) // name[s], uid[s], gid[s], muid[s]
 
 // MaxStatLen is the maximum size of a Stat structure.
 const MaxStatLen = minStatLen + MaxFilenameLen + (MaxUidLen * 3)
