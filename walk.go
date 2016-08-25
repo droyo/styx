@@ -98,7 +98,7 @@ func (w *walker) run() {
 	close(w.complete)
 	w.session.conn.clearTag(w.tag)
 	if len(w.found) == 0 {
-		w.session.conn.Rerror(w.tag, "no such file or directory")
+		w.session.conn.Rerror(w.tag, "No such file or directory")
 	} else {
 		w.session.files.Put(w.newfid, file{name: w.path})
 		w.session.conn.sessionFid.Put(w.newfid, w.session)
