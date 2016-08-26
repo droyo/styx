@@ -46,17 +46,18 @@ func (s Stat) Length() int64     { return int64(guint64(s[33:41])) }
 func (s Stat) SetLength(n int64) { buint64(s[33:41], uint64(n)) }
 
 // Name returns the name of the file.
-func (s Stat) Name() []byte { return msg(s).nthField(41, 0) }
+func (s Stat) Name() []byte { return msg(s).nthField(statFixedSize, 0) }
 
 // Uid returns the name of the owner of the file.
-func (s Stat) Uid() []byte { return msg(s).nthField(41, 1) }
+func (s Stat) Uid() []byte { return msg(s).nthField(statFixedSize, 1) }
 
 // Gid returns the group of the file.
-func (s Stat) Gid() []byte { return msg(s).nthField(41, 2) }
+func (s Stat) Gid() []byte { return msg(s).nthField(statFixedSize, 2) }
 
 // Muid returns the name of the user who last modified the file
-func (s Stat) Muid() []byte { return msg(s).nthField(41, 3) }
+func (s Stat) Muid() []byte { return msg(s).nthField(statFixedSize, 3) }
 
+// Size returns the length of the Stat structure in bytes.
 func (s Stat) Size() int { return int(guint16(s[:2])) }
 
 func (s Stat) String() string {
