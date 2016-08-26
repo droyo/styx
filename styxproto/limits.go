@@ -119,14 +119,8 @@ const megabyte = 1 << 20
 const DefaultMaxSize = 8 * megabyte
 
 // See stat(5) or stat(9P) for details on stat structure
-const statFixedSize = 2 + // size[2]
-	2 + // type[2]
-	4 + // dev[4]
-	13 + // qid[13]
-	4 + // mode[4]
-	4 + // atime[4]
-	4 + // mtime[4]
-						8 // length[8]
+const statFixedSize = 2 + 2 + 4 + 13 + 4 + 4 + 4 + 8
+
 const minStatLen = statFixedSize + (4 * 2) // name[s], uid[s], gid[s], muid[s]
 
 // MaxStatLen is the maximum size of a Stat structure.
