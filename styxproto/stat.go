@@ -57,13 +57,10 @@ func (s Stat) Gid() []byte { return msg(s).nthField(statFixedSize, 2) }
 // Muid returns the name of the user who last modified the file
 func (s Stat) Muid() []byte { return msg(s).nthField(statFixedSize, 3) }
 
-// Size returns the length of the Stat structure in bytes.
-func (s Stat) Size() int { return int(guint16(s[:2])) }
-
 func (s Stat) String() string {
-	return fmt.Sprintf("size=%d type=%x dev=%x qid=%q mode=%o atime=%d "+
+	return fmt.Sprintf("type=%x dev=%x qid=%q mode=%o atime=%d "+
 		"mtime=%d length=%d name=%q uid=%q gid=%q muid=%q",
-		s.Size(), s.Type(), s.Dev(), s.Qid(), s.Mode(), s.Atime(), s.Mtime(),
+		s.Type(), s.Dev(), s.Qid(), s.Mode(), s.Atime(), s.Mtime(),
 		s.Length(), s.Name(), s.Uid(), s.Gid(), s.Muid())
 }
 
