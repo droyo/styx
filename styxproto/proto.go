@@ -33,7 +33,7 @@ func (m msg) Len() int64 { return int64(guint32(m[:4])) }
 // Calling nthField on a message that has not been verified
 // can result in a run-time panic if the size headers are
 // incorrect.
-func (m msg) nthField(offset, n int) []byte {
+func nthField(m []byte, offset, n int) []byte {
 	size := int(guint16(m[offset : offset+2]))
 	for i := 0; i < n; i++ {
 		offset += size + 2
@@ -97,7 +97,7 @@ func (m Tversion) Msize() int64 { return int64(guint32(m[7:11])) }
 
 // Version identifies the level of the protocol that the client supports.
 // The string must always begin with the two characters "9P".
-func (m Tversion) Version() []byte { return msg(m).nthField(11, 0) }
+func (m Tversion) Version() []byte { return nthField(m, 11, 0) }
 
 func (m Tversion) String() string {
 	return fmt.Sprintf("Tversion msize=%d version=%q", m.Msize(), m.Version())
@@ -150,11 +150,11 @@ func (m Tauth) bytes() []byte { return m }
 func (m Tauth) Afid() uint32 { return guint32(m[7:11]) }
 
 // The uname field contains the name of the user to authenticate.
-func (m Tauth) Uname() []byte { return msg(m).nthField(11, 0) }
+func (m Tauth) Uname() []byte { return nthField(m, 11, 0) }
 
 // The aname field contains the name of the file tree to access. It
 // may be empty.
-func (m Tauth) Aname() []byte { return msg(m).nthField(11, 1) }
+func (m Tauth) Aname() []byte { return nthField(m, 11, 1) }
 
 func (m Tauth) String() string {
 	return fmt.Sprintf("Tauth afid=%d uname=%q aname=%q", m.Afid(), m.Uname(), m.Aname())
@@ -193,10 +193,10 @@ func (m Tattach) Fid() uint32 { return guint32(m[7:11]) }
 func (m Tattach) Afid() uint32 { return guint32(m[11:15]) }
 
 // Uname is the user name of the attaching user.
-func (m Tattach) Uname() []byte { return msg(m).nthField(15, 0) }
+func (m Tattach) Uname() []byte { return nthField(m, 15, 0) }
 
 // Aname is the name of the file tree that the client wants to access.
-func (m Tattach) Aname() []byte { return msg(m).nthField(15, 1) }
+func (m Tattach) Aname() []byte { return nthField(m, 15, 1) }
 
 func (m Tattach) String() string {
 	if m.Afid() == NoFid {
@@ -237,7 +237,7 @@ func (m Rerror) nbytes() int64 { return msg(m).nbytes() }
 func (m Rerror) bytes() []byte { return m }
 
 // Ename is a UTF-8 string describing the error that occured.
-func (m Rerror) Ename() []byte { return msg(m).nthField(7, 0) }
+func (m Rerror) Ename() []byte { return nthField(m, 7, 0) }
 
 func (m Rerror) String() string { return fmt.Sprintf("Rerror ename=%q", m.Ename()) }
 
@@ -298,7 +298,7 @@ func (m Twalk) Nwname() int { return int(guint16(m[15:17])) }
 
 // The Twalk message contains an ordered list of path name elements
 // that the client wishes to descend into in succession.
-func (m Twalk) Wname(n int) []byte { return msg(m).nthField(17, n) }
+func (m Twalk) Wname(n int) []byte { return nthField(m, 17, n) }
 
 func (m Twalk) String() string {
 	var buf [MaxWElem][]byte
@@ -411,7 +411,7 @@ func (m Tcreate) Len() int64    { return msg(m).Len() }
 func (m Tcreate) nbytes() int64 { return msg(m).nbytes() }
 func (m Tcreate) bytes() []byte { return m }
 func (m Tcreate) Fid() uint32   { return guint32(m[7:11]) }
-func (m Tcreate) Name() []byte  { return msg(m).nthField(11, 0) }
+func (m Tcreate) Name() []byte  { return nthField(m, 11, 0) }
 func (m Tcreate) Perm() uint32 {
 	// Would have been nice if Name came at the end
 	offset := 11 + 2 + guint16(m[11:13])
