@@ -580,7 +580,7 @@ func (m Rstat) Tag() uint16   { return msg(m).Tag() }
 func (m Rstat) Len() int64    { return msg(m).Len() }
 func (m Rstat) nbytes() int64 { return msg(m).nbytes() }
 func (m Rstat) bytes() []byte { return m }
-func (m Rstat) Stat() Stat    { return Stat(m[7:]) }
+func (m Rstat) Stat() Stat    { return nthField(m, 7, 0) }
 
 func (m Rstat) String() string { return "Rstat " + m.Stat().String() }
 
@@ -591,7 +591,7 @@ func (m Twstat) Len() int64    { return msg(m).Len() }
 func (m Twstat) nbytes() int64 { return msg(m).nbytes() }
 func (m Twstat) bytes() []byte { return m }
 func (m Twstat) Fid() uint32   { return guint32(m[7:11]) }
-func (m Twstat) Stat() Stat    { return Stat(m[11:]) }
+func (m Twstat) Stat() Stat    { return nthField(m, 11, 0) }
 
 func (m Twstat) String() string { return fmt.Sprintf("Twstat fid=%d stat=%q", m.Fid(), m.Stat()) }
 
