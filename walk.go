@@ -2,6 +2,10 @@ package styx
 
 import (
 	"os"
+	"path"
+	"strings"
+
+	"golang.org/x/net/context"
 
 	"aqwari.net/net/styx/styxproto"
 )
@@ -28,7 +32,7 @@ import (
 //
 // Thus given the following protocol message (fids replaced with their paths):
 //
-// 	Twalk /usr/share 5 ../include/linux/../../bin
+// 	Twalk /usr/share 6 ../include/linux/../../bin
 //
 // The user's program will instead see and respond to, *IN THIS ORDER*
 //
@@ -48,31 +52,36 @@ type walkElem struct {
 }
 
 type walker struct {
-	qids     []styxproto.Qid
-	found    []styxproto.Qid
-	filled   []bool
-	complete chan struct{}
-	collect  chan walkElem
-	newfid   uint32
-	path     string
+	qids, found []styxproto.Qid
+	filled      []bool
+	count       int
+	complete    chan struct{}
+	collect     chan walkElem
+	newfid      uint32
+	path        string
+
+	// for cancellation
+	cx context.Context
 
 	session *Session
 	tag     uint16
 }
 
-func newWalker(s *Session, tag uint16, fid uint32, filepath string, nwname int) *walker {
-	qids := make([]styxproto.Qid, nwname)
+func newWalker(s *Session, cx context.Context, msg styxproto.Twalk, base string, elem ...string) *walker {
+	qids := make([]styxproto.Qid, len(elem))
 	found := qids[:0]
+	newpath := path.Join(base, strings.Join(elem, "/"))
 	w := &walker{
 		qids:     qids,
 		found:    found,
-		filled:   make([]bool, nwname),
+		filled:   make([]bool, len(elem)),
 		complete: make(chan struct{}),
 		collect:  make(chan walkElem),
 		session:  s,
-		newfid:   fid,
-		path:     filepath,
-		tag:      tag,
+		newfid:   msg.Newfid(),
+		path:     newpath,
+		tag:      msg.Tag(),
+		cx:       cx,
 	}
 	go w.run()
 	return w
@@ -80,19 +89,29 @@ func newWalker(s *Session, tag uint16, fid uint32, filepath string, nwname int) 
 
 // runs in its own goroutine
 func (w *walker) run() {
-	for el := range w.collect {
-		if w.filled[el.index] {
-			continue
-		}
-		w.filled[el.index] = true
-		w.qids[el.index] = el.qid
-		for i := len(w.found); i < cap(w.found); i++ {
-			if w.qids[i] != nil {
-				w.found = w.found[:i+1]
+Loop:
+	for {
+		select {
+		case <-w.cx.Done():
+			break Loop
+		case el, ok := <-w.collect:
+			if !ok {
+				break Loop
 			}
-		}
-		if len(w.found) == len(w.qids) {
-			break
+			if w.filled[el.index] {
+				continue
+			}
+			w.count++
+			w.filled[el.index] = true
+			w.qids[el.index] = el.qid
+			for i := len(w.found); i < cap(w.found); i++ {
+				if w.qids[i] != nil {
+					w.found = w.found[:i+1]
+				}
+			}
+			if w.count == len(w.qids) {
+				break Loop
+			}
 		}
 	}
 	close(w.complete)

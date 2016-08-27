@@ -136,8 +136,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	for i := 0; i < cap(elem); i++ {
 		elem = append(elem, string(msg.Wname(i)))
 	}
-	newpath := path.Join(file.name, strings.Join(elem, "/"))
-	walker := newWalker(s, msg.Tag(), newfid, newpath, len(elem))
+	walker := newWalker(s, cx, msg, file.name, elem...)
 
 	for i := range elem {
 		fullpath := path.Join(file.name, strings.Join(elem[:i+1], "/"))
