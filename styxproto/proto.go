@@ -239,6 +239,8 @@ func (m Rerror) bytes() []byte { return m }
 // Ename is a UTF-8 string describing the error that occured.
 func (m Rerror) Ename() []byte { return nthField(m, 7, 0) }
 
+// Err creates a new value of type error using an Rerror message.
+func (m Rerror) Err() error     { return errors.New(string(m.Ename())) }
 func (m Rerror) String() string { return fmt.Sprintf("Rerror ename=%q", m.Ename()) }
 
 // When the response to a request is no longer needed, such as

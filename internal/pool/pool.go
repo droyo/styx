@@ -68,12 +68,28 @@ func (p *TagPool) Get() (tag uint16, ok bool) {
 	return uint16(t), notfull
 }
 
+// MustGet is like Get, but panics if the pool is full.
+func (p *TagPool) MustGet() uint16 {
+	if tag, ok := p.Get(); ok {
+		return tag
+	}
+	panic("tag pool is full")
+}
+
 // Get retrieves a free identifier from a FidPool. If the pool is full,
 // the second return value of Get will be false. Once an identifier
 // is no longer needed, it must be released using the Free method.
 // The return value is guaranteed to be less than FidPoolCeiling.
 func (p *FidPool) Get() (fid uint32, ok bool) {
 	return p.get(FidPoolCeiling)
+}
+
+// MustGet is like Get, but panics if the pool is full.
+func (p *FidPool) MustGet() uint32 {
+	if fid, ok := p.Get(); ok {
+		return fid
+	}
+	panic("fid pool is full")
 }
 
 func (p *pool) get(ceil uint32) (id uint32, ok bool) {
