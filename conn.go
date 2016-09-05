@@ -179,12 +179,9 @@ func (c *conn) serve() {
 		return
 	}
 
-Loop:
 	for c.Next() {
-		for _, m := range c.Messages() {
-			if !c.handleMessage(m) {
-				break Loop
-			}
+		if !c.handleMessage(c.Msg()) {
+			break
 		}
 	}
 	c.srv.logf("closed connection from %s", c.remoteAddr())
@@ -227,28 +224,26 @@ func (c *conn) acceptTversion() bool {
 
 Loop:
 	for c.Next() {
-		for _, m := range c.Messages() {
-			tver, ok := m.(styxproto.Tversion)
-			if !ok {
-				c.Rerror(m.Tag(), "need Tversion")
-				break Loop
-			}
-			msize := tver.Msize()
-			if msize < styxproto.MinBufSize {
-				c.Rerror(m.Tag(), "buffer too small")
-				break Loop
-			}
-			if msize < c.msize {
-				c.msize = msize
-				c.Encoder.MaxSize = msize
-				c.Decoder.MaxSize = msize
-			}
-			if !bytes.HasPrefix(tver.Version(), []byte("9P2000")) {
-				c.Rversion(uint32(c.msize), "unknown")
-			}
-			c.Rversion(uint32(c.msize), "9P2000")
-			return true
+		tver, ok := c.Msg().(styxproto.Tversion)
+		if !ok {
+			c.Rerror(tver.Tag(), "need Tversion")
+			break Loop
 		}
+		msize := tver.Msize()
+		if msize < styxproto.MinBufSize {
+			c.Rerror(tver.Tag(), "buffer too small")
+			break Loop
+		}
+		if msize < c.msize {
+			c.msize = msize
+			c.Encoder.MaxSize = msize
+			c.Decoder.MaxSize = msize
+		}
+		if !bytes.HasPrefix(tver.Version(), []byte("9P2000")) {
+			c.Rversion(uint32(c.msize), "unknown")
+		}
+		c.Rversion(uint32(c.msize), "9P2000")
+		return true
 	}
 	return false
 }

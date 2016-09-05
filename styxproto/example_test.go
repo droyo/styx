@@ -47,17 +47,15 @@ func ExampleDecoder() {
 	d := styxproto.NewDecoder(rwc)
 	e := styxproto.NewEncoder(rwc)
 	for d.Next() {
-		for _, msg := range d.Messages() {
-			switch msg := msg.(type) {
-			case styxproto.Tversion:
-				log.Printf("Client wants version %s", msg.Version())
-				e.Rversion(8192, "9P2000")
-			case styxproto.Tread:
-				e.Rread(msg.Tag(), []byte("data data"))
-			case styxproto.Twrite:
-				log.Printf("Receiving %d bytes from client", msg.Count())
-				io.Copy(ioutil.Discard, msg)
-			}
+		switch msg := d.Msg().(type) {
+		case styxproto.Tversion:
+			log.Printf("Client wants version %s", msg.Version())
+			e.Rversion(8192, "9P2000")
+		case styxproto.Tread:
+			e.Rread(msg.Tag(), []byte("data data"))
+		case styxproto.Twrite:
+			log.Printf("Receiving %d bytes from client", msg.Count())
+			io.Copy(ioutil.Discard, msg)
 		}
 	}
 }

@@ -122,20 +122,18 @@ func (c *clientConn) negotiateVersion() error {
 	// to our Tversion, with the way the code below is written, they
 	// may be silently ignored.
 	for c.Next() {
-		for _, msg := range c.Messages() {
-			rver, ok := msg.(styxproto.Rversion)
-			if !ok {
-				return errBadResponse
-			}
-			if rver.Msize() > c.msize {
-				return errBadMsize
-			}
-			if string(rver.Version()) != c.version {
-				return errBadVersion
-			}
-			c.msize = rver.Msize()
-			return nil
+		rver, ok := c.Msg().(styxproto.Rversion)
+		if !ok {
+			return errBadResponse
 		}
+		if rver.Msize() > c.msize {
+			return errBadMsize
+		}
+		if string(rver.Version()) != c.version {
+			return errBadVersion
+		}
+		c.msize = rver.Msize()
+		return nil
 	}
 	if c.Decoder.Err() != nil {
 		return c.Decoder.Err()
@@ -146,19 +144,17 @@ func (c *clientConn) negotiateVersion() error {
 // runs in its own goroutine
 func (c *clientConn) run() {
 	for c.Next() {
-		for _, msg := range c.Messages() {
-			tag := msg.Tag()
+		tag := c.Msg().Tag()
 
-			c.mu.Lock()
-			fn := c.requests[tag]
-			delete(c.requests, tag)
-			c.mu.Unlock()
+		c.mu.Lock()
+		fn := c.requests[tag]
+		delete(c.requests, tag)
+		c.mu.Unlock()
 
-			c.tagpool.Free(tag)
+		c.tagpool.Free(tag)
 
-			if fn != nil {
-				fn(msg)
-			}
+		if fn != nil {
+			fn(c.Msg())
 		}
 	}
 	c.close()

@@ -42,6 +42,6 @@ func TestInvalidMsgFile(t *testing.T) {
 func testInvalidMsg(t *testing.T, r io.Reader) {
 	d := NewDecoder(r)
 	for d.Next() {
-		t.Logf("parsed %d messages", len(d.Messages()))
+		t.Logf("parsed %T", d.Msg())
 	}
 }

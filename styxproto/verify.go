@@ -11,7 +11,7 @@ func validType(t uint8) bool {
 // check that a message is as big or as small as
 // it needs to be, given what we know about its
 // type.
-func verifySize(m msg) error {
+func verifySizeAndType(m msg) error {
 	t, n := m.Type(), m.Len()
 	if !validType(t) {
 		return errInvalidMsgType

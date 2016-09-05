@@ -1,14 +1,9 @@
 package styxproto
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"io"
-)
-
-var (
-	errShortRead = errors.New("not enough data in buffer to complete message")
 )
 
 var msgParseLUT = [...]func(msg, io.Reader) (Msg, error){
@@ -41,119 +36,69 @@ var msgParseLUT = [...]func(msg, io.Reader) (Msg, error){
 	msgRwstat:   parseRwstat,
 }
 
+var (
+	errShortRead = errors.New("not enough data in buffer to complete message")
+)
+
 // read just enough data to figure out the type of message and if
 // it's the right size.
 func (s *Decoder) nextHeader() (msg, error) {
 	return s.growdot(minMsgSize)
 }
 
-// fetchMessages returns all available 9P messages from r. r must be
-// a bufio.Reader with size greater than MinBufSize. fetchMessages is
-// guaranteed to fetch at least one 9P message if err != nil.  For
-// every invalid message, a BadMessage is added to s.msg. fetchMessages
-// will only call Read if there is not enough data buffered to parse at least
-// one message.
-func (s *Decoder) fetchMessages() error {
-	var err error
-	result := s.msg[:0]
-
-	for {
-		oldstart := s.start
-		result, err = s.fetchOne(result)
-		if err != nil {
-			break
-		}
-		if oldstart == s.start {
-			panic("decoder did not advance but did not return an error")
-		}
-		// Stop after a Tversion message. This allows us to perform protocol
-		// negotiation *before* parsing additional messages.
-		if _, ok := result[0].(Tversion); ok {
-			break
-		}
-	}
-	if (err == bufio.ErrBufferFull || err == errShortRead) && len(result) > 0 {
-		err = nil
-	}
-	if err == io.EOF && s.dotlen() != 0 {
-		err = io.ErrUnexpectedEOF
-	}
-	s.err = err
-	s.msg = result
-	return s.err
-}
-
-// fetchOne reads the next buffered message and adds it to
-// result. fetchOne will return bufio.ErrBufferFull if there is not
-// enough space in the buffer to hold the next message. fetchOne
-// will not perform additional I/O unless this is the first message being
-// parsed (len(result) == 0).
-func (s *Decoder) fetchOne(result []Msg) ([]Msg, error) {
-	// fetchMessages guarantees it will return at least one message.
-	first := (len(result) == 0)
-
-	if s.buflen() < minMsgSize && !first {
-		return result, errShortRead
-	}
-
+// fetchMessage reads the next buffered message from the stream
+// into s.msg. fetchMessage will return bufio.ErrBufferFull if there is not
+// enough space in the buffer to hold the next message.
+func (s *Decoder) fetchMessage() (Msg, error) {
 	dot, err := s.nextHeader()
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 
-	if err := verifySize(dot); err != nil {
-		return s.badMessage(result, dot, err)
+	if err := verifySizeAndType(dot); err != nil {
+		return s.badMessage(dot, err)
 	}
 
 	msgType := dot.Type()
 	msgSize := dot.Len()
 	if s.MaxSize > 0 && msgSize > s.MaxSize {
-		return result, ErrMaxSize
+		return nil, ErrMaxSize
 	}
 
 	minSize := minSizeLUT[msgType]
-	if s.buflen()-minSize < s.dotlen() && !first {
-		return result, errShortRead
-	}
 
 	if _, err := s.growdot(minSize); err != nil {
-		return result, err
+		return nil, err
 	}
 
 	if msgType == msgTwrite || msgType == msgRread {
-		return s.readRW(result)
+		return s.readRW()
 	}
-	return s.readFixed(result)
+	return s.readFixed()
 }
 
 // Every message besides Twrite and Rread have a small maximum size,
 // and are stored wholly in memory for convenience.
-func (s *Decoder) readFixed(result []Msg) ([]Msg, error) {
-	first := (len(result) == 0)
+func (s *Decoder) readFixed() (Msg, error) {
 	msg := msg(s.dot())
 	msgSize, msgType := msg.Len(), msg.Type()
 
-	if int64(s.buflen())+int64(s.dotlen()) < msgSize && !first {
-		return result, errShortRead
-	}
-
 	msg, err := s.growdot(int(msgSize))
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 
 	parsed, err := parseMsg(msgType, msg, nil)
 
 	// Nothing left to read, all that's possible are parsing errors
 	if err != nil {
-		return s.badMessage(result, msg, err)
+		return s.badMessage(msg, err)
 	}
-
 	s.mark()
-	return append(result, parsed), nil
+	return parsed, nil
 }
 
-func (s *Decoder) readRW(result []Msg) ([]Msg, error) {
+func (s *Decoder) readRW() (Msg, error) {
 	var err error
 
 	msg := msg(s.dot())
@@ -166,23 +111,25 @@ func (s *Decoder) readRW(result []Msg) ([]Msg, error) {
 
 	msg, err = s.growdot(readSize)
 	if err != nil {
+		// we have already buffered IOHeaderSize bytes, so
+		// we are reading from the bufio.Reader's internal buffer.
+		// The docs state this should never fail.
 		panic("read of buffered data failed: " + err.Error())
 	}
 
 	parsed, err := parseMsg(msgType, msg, s.r)
 	if err != nil {
-		return s.badMessage(result, msg, err)
+		return s.badMessage(msg, err)
 	}
-
 	s.mark()
-	return append(result, parsed), nil
+	return parsed, nil
 }
 
 func parseMsg(t uint8, m msg, r io.Reader) (Msg, error) {
 	return msgParseLUT[t](m, r)
 }
 
-func (s *Decoder) badMessage(result []Msg, bad msg, reason error) ([]Msg, error) {
+func (s *Decoder) badMessage(bad msg, reason error) (Msg, error) {
 	// Invalid messages are a bit tricky; we want the caller to know right
 	// away that that an invalid message was encountered (so that he may
 	// choose to sever the connection), but if the message is not fully buffered,
@@ -190,16 +137,16 @@ func (s *Decoder) badMessage(result []Msg, bad msg, reason error) ([]Msg, error)
 	// skip the message. This is why the BadMessage type has a field for the
 	// number of bytes to skip, rather than the bytes themselves.
 	length := bad.Len()
-	result = append(result, BadMessage{
+	msg := BadMessage{
 		Err:    reason,
 		tag:    bad.Tag(),
 		length: length,
-	})
+	}
 	if length == 0 {
-		return result, errZeroLen
+		return nil, errZeroLen
 	}
 	if int64(s.buflen()+s.dotlen()) < length {
-		return result, errShortRead
+		return nil, errShortRead
 	}
 	// We can still continue parsing. This prevents one bad client
 	// from hurting performance for others on the same connection.
@@ -209,7 +156,7 @@ func (s *Decoder) badMessage(result []Msg, bad msg, reason error) ([]Msg, error)
 		panic(err)
 	}
 	s.mark()
-	return result, nil
+	return msg, nil
 }
 
 func parseTversion(dot msg, _ io.Reader) (Msg, error) {

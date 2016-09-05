@@ -59,9 +59,9 @@ type Decoder struct {
 	// current selection in the buffered data
 	start, pos int
 
-	// Last fetched messages. slices on r's internal buffers, so
-	// only valid until next call to r.Read, r.Discard.
-	msg []Msg
+	// Last fetched message. slices on br's internal buffer, so
+	// only valid until next call to br.Read
+	msg Msg
 
 	// Last error encountered when reading from r
 	// or during parsing
@@ -75,7 +75,7 @@ func (s *Decoder) Reset(r io.Reader) {
 	s.br.Reset(s.r)
 	s.start = 0
 	s.pos = 0
-	s.msg = s.msg[:0]
+	s.msg = nil
 	s.err = nil
 }
 
@@ -87,7 +87,7 @@ func (s *Decoder) Reset(r io.Reader) {
 //
 // Invalid messages are not considered errors, and are
 // represented in the Messages slice as values of type BadMessage.
-// Only problems with the underlying I/O device are
+// Only problems with the underlying io.Reader are
 // considered errors.
 func (s *Decoder) Err() error {
 	if s.err == io.EOF {
@@ -96,55 +96,33 @@ func (s *Decoder) Err() error {
 	return s.err
 }
 
-// Messages returns the 9P messages fetched from the last
-// call to Next. The returned messages are only valid until
-// the next call to the Decoder's Next method. All Twrite
-// and Rread messages must be closed before the next
-// call to Next.
-func (s *Decoder) Messages() []Msg {
+// Msg returns the last 9P message decoded in the stream. It
+// returns a non-nil message if and only if the last call to the
+// Decoder's Next method returned true. The return value of
+// Msg is only valid until the next call to a decoder's Next method.
+func (s *Decoder) Msg() Msg {
 	return s.msg
 }
 
-// Next fetches the next 9P messages from the Decoder's underlying
-// io.Reader. If an error is encountered, either with the underlying
-// IO, Next will return false, and the Decoder's Err method will return
+// Next fetches the next 9P message from the Decoder's underlying
+// io.Reader. If an error is encountered reading from the underlying
+// stream, Next will return false, and the Decoder's Err method will return
 // the first error encountered.
 //
-// If Next returns true, at least one 9P message will be returned from
-// the next call to the Messages method of the Decoder. If multiple
-// messages can be retrieved with a single call to Read, they will be
-// validated at once and available via the Messages method. If the
-// Decoder encounters a Tversion or Rversion message, parsing will
-// stop even if additional messages are pending, so that new messages
-// can be parsed based on the protocol version and maximum size.
+// If Next returns true, the Msg method of the Decoder will return the
+// decoded 9P message.
 func (s *Decoder) Next() bool {
-	s.exhaustReaders()
-	s.dropMessages()
-	s.resetdot()
+	if s.msg != nil {
+		s.err = discard(s.br, s.msg.Len())
+		s.msg = nil
+	}
 	if s.err != nil {
+		s.msg = nil
 		return false
 	}
-
-	if err := s.fetchMessages(); err != nil {
-		return len(s.msg) > 0
-	}
-	return true
-}
-
-// Before reading the next batch of messages, it is crucial that any
-// associated io.Reader's are exhausted, because one of them may
-// be pulling directly from the underlying Reader, and attempting
-// to parse before the message is fully read and out of the buffer
-// will not work.
-func (s *Decoder) exhaustReaders() {
-	for _, msg := range s.msg {
-		if r, ok := msg.(io.Reader); ok {
-			if _, err := io.Copy(ioutil.Discard, r); err != nil {
-				s.err = err
-				break
-			}
-		}
-	}
+	s.resetdot()
+	s.msg, s.err = s.fetchMessage()
+	return s.msg != nil
 }
 
 // A bufio.Reader is not just a way to smooth out I/O performance;
@@ -216,15 +194,4 @@ func (s *Decoder) fill(n int) error {
 func discard(r *bufio.Reader, n int64) error {
 	_, err := io.CopyN(ioutil.Discard, r, n)
 	return err
-}
-
-// free up buffer space for the next parsing cycle
-func (s *Decoder) dropMessages() {
-	for _, msg := range s.msg {
-		if err := discard(s.br, msg.nbytes()); err != nil {
-			s.err = err
-			break
-		}
-	}
-	s.msg = s.msg[:0]
 }

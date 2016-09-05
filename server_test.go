@@ -42,9 +42,7 @@ func sendClientTraffic(t *testing.T, ln *netutil.PipeListener) {
 
 	d := styxproto.NewDecoder(c)
 	for d.Next() {
-		for _, msg := range d.Messages() {
-			t.Logf("%d %s", msg.Tag(), msg)
-		}
+		t.Logf("%d %s", d.Msg().Tag(), d.Msg())
 	}
 	if d.Err() != nil {
 		t.Log(d.Err())

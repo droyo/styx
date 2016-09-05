@@ -25,10 +25,8 @@ func Decoder(r io.Reader, fn TraceFn) *styxproto.Decoder {
 	decoderTrace := styxproto.NewDecoderSize(rd, 8*kilobyte)
 	go func() {
 		for decoderInput.Next() {
-			for _, m := range decoderInput.Messages() {
-				fn(m)
-				styxproto.Write(wr, m)
-			}
+			fn(decoderInput.Msg())
+			styxproto.Write(wr, decoderInput.Msg())
 		}
 		wr.Close()
 	}()
@@ -43,10 +41,8 @@ func Encoder(w io.Writer, fn TraceFn) *styxproto.Encoder {
 	decoder := styxproto.NewDecoderSize(rd, 8*kilobyte)
 	go func() {
 		for decoder.Next() {
-			for _, m := range decoder.Messages() {
-				fn(m)
-				styxproto.Write(w, m)
-			}
+			fn(decoder.Msg())
+			styxproto.Write(w, decoder.Msg())
 		}
 	}()
 	return encoder
