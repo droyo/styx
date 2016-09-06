@@ -158,3 +158,16 @@ Sat Aug 13 23:36:56 EDT 2016 TODO
 · The `styxproto` package seems pretty solid. The `styx` package,
   however, is far from that.
 · Twstat needs a copy of the stat structure
+
+write a styxmount package that bridges 9P and whatever the
+OS provides for user-space filesystems.
+
+- Linux: FUSE or v9fs
+- OSX: FUSE or webDAV
+- Windows: WebDAV or dokan
+- NetBSD: FUSE or Puffs
+
+This way people can write applications that contain everything their
+users need to use. We should favor that which the end user does not
+have to install.
+
