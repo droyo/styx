@@ -55,6 +55,7 @@ func (info reqInfo) Path() string {
 	return info.path
 }
 
+// Rerror sends an error to the client.
 func (info reqInfo) Rerror(format string, args ...interface{}) {
 	info.session.conn.clearTag(info.tag)
 	info.session.conn.Rerror(info.tag, format, args...)
@@ -123,13 +124,31 @@ func modePerm(mode os.FileMode) uint32 {
 	return perm | uint32(mode&os.ModePerm)
 }
 
-// A Topen message is sent when a client wants to open a file for writing.
-// The Ropen method should be called to provide the opened file.
+// A Topen message is sent when a client wants to open a file for I/O
+// Use the Ropen method to provide the opened file.
+//
+// The default response to a Topen message to send an Rerror message
+// saying "permssion denied".
 type Topen struct {
-	Flag int // the mode to open the file in
+	// The mode to open the file with. One of the flag constants
+	// in the os package, such as O_RDWR, O_APPEND etc.
+	Flag int
 	reqInfo
 }
 
+// The Ropen method signals to the client that a file has succesfully
+// been opened and is ready for I/O. After Ropen returns, future reads
+// and writes to the opened file handle will pass through rwc.
+//
+// The value rwc must implement some of the interfaces in the io package
+// for reading and writing. If the type implements io.Seeker or io.ReaderAt
+// and io.WriterAt, clients may read or write at arbitrary offsets within
+// the file. Types that only implement Read or Write operations will return
+// errors on writes and reads, respectively.
+//
+// If a file does not implement any of the Read or Write interfaces in
+// the io package, A generic error is returned to the client, and a message
+// will be written to the server's ErrorLog.
 func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 	var (
 		file file
@@ -163,10 +182,19 @@ func (t Topen) defaultResponse() {
 }
 
 // A Tstat message is sent when a client wants metadata about a file.
+// A client should have read access to the file's containing directory.
+// Call the Rstat method for a succesful request.
+//
+// The default response for a Tstat message is an Rerror message
+// saying "permission denied".
 type Tstat struct {
 	reqInfo
 }
 
+// Rstat responds to a succesful Tstat request. The styx package will
+// translate the os.FileInfo value into the appropriate 9P structure. Rstat
+// will attempt to resolve the names of the file's owner and group. If
+// that cannot be done, an empty string is sent.
 func (t Tstat) Rstat(info os.FileInfo) {
 	buf := make([]byte, styxproto.MaxStatLen)
 	uid, gid, muid := sys.FileOwner(info)
@@ -196,6 +224,9 @@ func (t Tstat) defaultResponse() {
 // and open it with the provided Mode. The Path method of a Tcreate
 // message returns the absolute path of the containing directory. A user
 // must have write permissions in the directory to create a file.
+//
+// The default response to a Tcreate message is an Rerror message
+// saying "permission denied".
 type Tcreate struct {
 	Name string      // name of the file to create
 	Perm os.FileMode // permissions and file type to create
@@ -203,6 +234,23 @@ type Tcreate struct {
 	reqInfo
 }
 
+// NewPath joins the path for the Tcreate's containing directory
+// with its Name field, returning the absolute path to the new file.
+func (t Tcreate) NewPath() string {
+	return path.Join(t.Path(), t.Name)
+}
+
+// Path returns the absolute path to the containing directory of the
+// new file.
+func (t Tcreate) Path() string {
+	return t.reqInfo.Path() // overrode this method for the godoc comments
+}
+
+// Rcreate is used to respond to a succesful create request. With 9P, creating
+// a file also opens the file for I/O. Once Rcreate returns, future read
+// and write requests to the file handle will pass through rwc. The value
+// rwc must meet the same criteria listed for the Ropen method of a Topen
+// request.
 func (t Tcreate) Rcreate(rwc interface{}) {
 	var (
 		f   styxfile.Interface
@@ -235,15 +283,32 @@ func (t Tcreate) defaultResponse() {
 }
 
 // A Tremove message is sent when a client wants to delete a file
-// from the server.
+// from the server. The Rremove method should be called once the
+// file has been succesfully deleted.
+//
+// The default response to a Tremove message is an Rerror message
+// saying "permission denied".
 type Tremove struct {
 	reqInfo
 }
 
+// Rremove signals to the client that a file has been succesfully
+// removed. The file handle for the file is no longer valid, and may be
+// re-used for other files. Whether or not any other file handles associated
+// with the file continue to be usable for I/O is implementation-defined;
+// many Unix file systems allow a process to continue writing to a file that
+// has been "unlinked", so long as the process has an open file descriptor.
 func (t Tremove) Rremove() {
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
+
+	// NOTE(droyo): This is not entirely correct; if the server wants
+	// to implement unix-like semantics (the file hangs around as
+	// long as there's 1 descriptor for it), we should not delete the
+	// qid until *all* references to it are removed. We'll need to implement
+	// reference counting for that :\
 	t.session.conn.qidpool.Del(t.Path())
+
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rremove(t.tag)
 	if !t.session.DecRef() {
@@ -256,12 +321,20 @@ func (t Tremove) defaultResponse() {
 }
 
 // A Twstat message is sent when a client wants to update the
-// metadata about a file on the server.
+// metadata about a file on the server. In 9P, rather than having
+// discrete rename, chown, chmod, etc requests, the Twstat
+// request is used to update zero or more attributes for a file.
+//
+// The default response for a Twstat message is an Rerror message
+// saying "permission denied."
 type Twstat struct {
 	Stat os.FileInfo
 	reqInfo
 }
 
+// Rwstat signals to the client that the file metadata has been
+// succesfully updated. Once Rwstat is called, future responses
+// to Tstat requests should reflect the provided changes.
 func (t Twstat) Rwstat() {
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rwstat(t.tag)

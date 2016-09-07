@@ -128,9 +128,23 @@ Loop:
 	}
 }
 
-// A Twalk message is sent when a client wants to check that a given
-// file exists. A server should call Rwalk if the file exists, or Rerror
-// otherwise.
+// A client sends a Twalk message both to probe if a file exists, and to
+// move a "cursor" within the filesystem hierarchy. In a traditional file
+// system, a Twalk request is similar to using chdir to change the current
+// directory.  File servers are free to attach additional meaning to Twalk
+// requests. For instance, a server may create directories on-demand as
+// clients walk to them.
+//
+// The 9P protocol allows for clients to walk multiple directories with
+// a single 9P message. The styx package translates such requests into
+// multiple Twalk values, providing the following guarantees:
+//
+// 	- Path() will return a cleaned, absolute path
+// 	- Consecutive, related Twalk requests will differ by at
+// 	  most 1 path element.
+//
+// The default response to a Twalk request is an Rerror message saying
+// "No such file or directory".
 type Twalk struct {
 	index int
 	walk  *walker
