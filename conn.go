@@ -289,7 +289,10 @@ func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
 }
 
 func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
-	var handler Handler = DefaultServeMux
+	var handler Handler = HandlerFunc(func(s *Session) {
+		for s.Next() {
+		}
+	})
 	if c.srv.Handler != nil {
 		handler = c.srv.Handler
 	}

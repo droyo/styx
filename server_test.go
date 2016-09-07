@@ -64,17 +64,15 @@ func TestServerBasic(t *testing.T) {
 }
 
 func TestEchoServer(t *testing.T) {
-	mux := NewServeMux()
 	srv := Server{
 		ErrorLog: (*testLogger)(t),
 		TraceLog: (*testLogger)(t),
-		Handler:  mux,
 	}
 	var ln netutil.PipeListener
 	defer ln.Close()
 
-	mux.HandleFunc("/", func(s *Session) {
-		for msg := range s.Requests {
+	srv.Handler = HandlerFunc(func(s *Session) {
+		for msg := range s.requests {
 			t.Logf("%T %s", msg, msg.Path())
 			switch msg := msg.(type) {
 			case Topen:

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/context"
 
@@ -35,10 +36,21 @@ type Session struct {
 	Access string
 
 	// Incoming requests from the client will be sent over the
-	// Requests channel. When a new Request is received, the
-	// previous request is no longer valid. The Requests channel
+	// requests channel. When a new request is received, the
+	// previous request is no longer valid. The requests channel
 	// is closed when a session is over.
-	Requests chan Request
+	requests chan Request
+
+	// This is the last request processed. It must be cleaned up
+	// with each call to Next().
+	req Request
+
+	// To enable "middleware" like net/http allows, while still
+	// providing the Serve9P API that ties a session lifetime
+	// to the lifetime of a single function call, we must be able
+	// to pass a request along the line and wait for any downstream
+	// handlers to finish processing it.
+	waiting *sync.WaitGroup
 
 	// Sends nil once auth is successful, err otherwise.
 	// Closed after authentication is complete, so can only
@@ -71,7 +83,7 @@ func newSession(c *conn, m fattach) *Session {
 		conn:     c,
 		files:    util.NewMap(),
 		authC:    make(chan error, 1),
-		Requests: make(chan Request),
+		requests: make(chan Request),
 	}
 	return s
 }
@@ -98,6 +110,27 @@ func (s *Session) fetchFile(fid uint32) (file, bool) {
 		return v.(file), true
 	}
 	return file{}, false
+}
+
+// Next retrieves the next Request for a 9P session. The next request
+// for the session can be accessed via the Request method if and only
+// if Next returns true. Any previous messages retrieved for the session
+// should not be modified or responded to after Next is called; if they have
+// not been answered, the styx package will send default responses for
+// them. The default response for a message can be found in the comments
+// for that type. Next returns false if the session has ended or there was an
+// error receiving the next Request.
+func (s *Session) Next() bool {
+	//TODO(droyo): clean up the previous message
+	var ok bool
+	s.req, ok = <-s.requests
+	return ok
+}
+
+// Request returns the last 9P message received by the Session. It is
+// only valid until the next call to Next.
+func (s *Session) Request() Request {
+	return s.req
 }
 
 func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file) bool {
@@ -140,7 +173,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 
 	for i := range elem {
 		fullpath := path.Join(file.name, strings.Join(elem[:i+1], "/"))
-		s.Requests <- Twalk{
+		s.requests <- Twalk{
 			index:   i,
 			walk:    walker,
 			reqInfo: newReqInfo(cx, s, msg, fullpath),
@@ -156,7 +189,7 @@ func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file
 		return true
 	}
 	flag := openFlag(msg.Mode())
-	s.Requests <- Topen{
+	s.requests <- Topen{
 		Flag:    flag,
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
@@ -170,7 +203,7 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 		s.conn.clearTag(msg.Tag())
 		return false
 	}
-	s.Requests <- Tcreate{
+	s.requests <- Tcreate{
 		Name:    string(msg.Name()),
 		Perm:    fileMode(msg.Perm()),
 		Flag:    openFlag(msg.Mode()),
@@ -180,7 +213,7 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 }
 
 func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file file) bool {
-	s.Requests <- Tremove{
+	s.requests <- Tremove{
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
@@ -201,7 +234,7 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 		s.conn.Rstat(msg.Tag(), stat)
 		return true
 	}
-	s.Requests <- Tstat{
+	s.requests <- Tstat{
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
 	return true
@@ -210,7 +243,7 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
 	stat := make(styxproto.Stat, len(msg.Stat()))
 	copy(stat, msg.Stat())
-	s.Requests <- Twstat{
+	s.requests <- Twstat{
 		Stat:    statInfo(stat),
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
@@ -283,9 +316,9 @@ func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file fi
 // session. The handler is still running and we must notify
 // it.
 func (s *Session) endSession() {
-	if s.Requests != nil {
-		close(s.Requests)
-		s.Requests = nil
+	if s.requests != nil {
+		close(s.requests)
+		s.requests = nil
 	}
 }
 

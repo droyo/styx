@@ -9,11 +9,11 @@ import (
 
 func ExampleSession() {
 	var n int
-	styx.HandleFunc("/", func(s *styx.Session) {
+	h := styx.HandlerFunc(func(s *styx.Session) {
 		isdir := make(map[string]bool)
-		for t := range s.Requests {
+		for s.Next() {
 			n++
-			switch t := t.(type) {
+			switch t := s.Request().(type) {
 			case styx.Topen:
 				parent, _ := path.Split(t.Path())
 				isdir[parent] = true
@@ -30,5 +30,5 @@ func ExampleSession() {
 			}
 		}
 	})
-	log.Fatal(styx.ListenAndServe(":564", nil))
+	log.Fatal(styx.ListenAndServe(":564", h))
 }
