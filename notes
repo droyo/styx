@@ -171,3 +171,5 @@ This way people can write applications that contain everything their
 users need to use. We should favor that which the end user does not
 have to install.
 
+current method of detecting already sent messages is no good,
+since we're not passing pointers, we're passing the full type.

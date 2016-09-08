@@ -52,6 +52,11 @@ func (p *Pool) Del(name string) {
 	p.m.Del(name)
 }
 
+// Do calls fn while holding the write lock for the pool
+func (p *Pool) Do(fn func(map[interface{}]interface{})) {
+	p.m.Do(fn)
+}
+
 // Get fetches the Qid currently associated with name from the pool. The
 // Qid is only valid if the second return value is true.
 func (p *Pool) Get(name string) (styxproto.Qid, bool) {

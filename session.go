@@ -243,16 +243,6 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 	return true
 }
 
-func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
-	stat := make(styxproto.Stat, len(msg.Stat()))
-	copy(stat, msg.Stat())
-	s.requests <- Twstat{
-		Stat:    statInfo(stat),
-		reqInfo: newReqInfo(cx, s, msg, file.name),
-	}
-	return true
-}
-
 func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file) bool {
 	if file.rwc == nil {
 		s.conn.clearTag(msg.Tag())

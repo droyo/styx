@@ -3,7 +3,6 @@ package styx
 import (
 	"os"
 	"path"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -281,51 +280,4 @@ func (t Tremove) Rremove() {
 
 func (t Tremove) defaultResponse() {
 	t.Rerror("permission denied")
-}
-
-// A Twstat message is sent when a client wants to update the
-// metadata about a file on the server. In 9P, rather than having
-// discrete rename, chown, chmod, etc requests, the Twstat
-// request is used to update zero or more attributes for a file.
-//
-// The default response for a Twstat message is an Rerror message
-// saying "permission denied."
-type Twstat struct {
-	Stat os.FileInfo
-	reqInfo
-}
-
-// Rwstat signals to the client that the file metadata has been
-// succesfully updated. Once Rwstat is called, future responses
-// to Tstat requests should reflect the provided changes.
-func (t Twstat) Rwstat() {
-	t.sent = true
-	t.session.conn.clearTag(t.tag)
-	t.session.conn.Rwstat(t.tag)
-}
-
-func (t Twstat) defaultResponse() {
-	t.Rerror("permission denied")
-}
-
-// Make a Stat look like an os.FileInfo
-type statInfo styxproto.Stat
-
-func (s statInfo) Name() string { return string(styxproto.Stat(s).Name()) }
-func (s statInfo) Size() int64  { return styxproto.Stat(s).Length() }
-
-func (s statInfo) Mode() os.FileMode {
-	return styxfile.ModeOS(styxproto.Stat(s).Mode())
-}
-
-func (s statInfo) ModTime() time.Time {
-	return time.Unix(int64(styxproto.Stat(s).Mtime()), 0)
-}
-
-func (s statInfo) IsDir() bool {
-	return styxproto.Stat(s).Mode()&styxproto.DMDIR != 0
-}
-
-func (s statInfo) Sys() interface{} {
-	return styxproto.Stat(s)
 }
