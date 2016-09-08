@@ -156,6 +156,7 @@ type Twalk struct {
 // mode are ignored, and only the file type bits, such as os.ModeDir,
 // are sent to the client.
 func (t Twalk) Rwalk(mode os.FileMode) {
+	t.sent = true
 	qid := t.session.conn.qid(t.Path(), qidType(mode))
 	select {
 	case t.walk.collect <- walkElem{qid: qid, index: t.index}:
@@ -166,6 +167,7 @@ func (t Twalk) Rwalk(mode os.FileMode) {
 // Rerror signals to the client that the file named by the Twalk's
 // Path method does not exist.
 func (t Twalk) Rerror(format string, args ...interface{}) {
+	t.sent = true
 	select {
 	case t.walk.collect <- walkElem{index: t.index}:
 	case <-t.walk.complete:
@@ -173,5 +175,5 @@ func (t Twalk) Rerror(format string, args ...interface{}) {
 }
 
 func (t Twalk) defaultResponse() {
-	t.Rerror("no such file or directory")
+	t.Rerror("No such file or directory")
 }

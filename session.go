@@ -121,7 +121,9 @@ func (s *Session) fetchFile(fid uint32) (file, bool) {
 // for that type. Next returns false if the session has ended or there was an
 // error receiving the next Request.
 func (s *Session) Next() bool {
-	//TODO(droyo): clean up the previous message
+	if s.req != nil && !s.req.handled() {
+		s.req.defaultResponse()
+	}
 	var ok bool
 	s.req, ok = <-s.requests
 	return ok

@@ -37,6 +37,7 @@ type Request interface {
 	// In most cases, the default response is to send an error that the user
 	// has insufficient permissions or the file in question does not exist.
 	defaultResponse()
+	handled() bool
 }
 
 // common fields among all requests. Some may be nil for
@@ -48,6 +49,13 @@ type reqInfo struct {
 	session *Session
 	msg     styxproto.Msg
 	path    string
+
+	// used to handle default responses
+	sent bool
+}
+
+func (info reqInfo) handled() bool {
+	return info.sent
 }
 
 // Path returns the absolute path of the file being operated on.
@@ -57,6 +65,7 @@ func (info reqInfo) Path() string {
 
 // Rerror sends an error to the client.
 func (info reqInfo) Rerror(format string, args ...interface{}) {
+	info.sent = true
 	info.session.conn.clearTag(info.tag)
 	info.session.conn.Rerror(info.tag, format, args...)
 }
@@ -150,6 +159,7 @@ type Topen struct {
 // the io package, A generic error is returned to the client, and a message
 // will be written to the server's ErrorLog.
 func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
+	t.sent = true
 	var (
 		file file
 		f    styxfile.Interface
@@ -196,6 +206,7 @@ type Tstat struct {
 // will attempt to resolve the names of the file's owner and group. If
 // that cannot be done, an empty string is sent.
 func (t Tstat) Rstat(info os.FileInfo) {
+	t.sent = true
 	buf := make([]byte, styxproto.MaxStatLen)
 	uid, gid, muid := sys.FileOwner(info)
 	name := info.Name()
@@ -252,6 +263,7 @@ func (t Tcreate) Path() string {
 // rwc must meet the same criteria listed for the Ropen method of a Topen
 // request.
 func (t Tcreate) Rcreate(rwc interface{}) {
+	t.sent = true
 	var (
 		f   styxfile.Interface
 		err error
@@ -299,6 +311,7 @@ type Tremove struct {
 // many Unix file systems allow a process to continue writing to a file that
 // has been "unlinked", so long as the process has an open file descriptor.
 func (t Tremove) Rremove() {
+	t.sent = true
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
 
@@ -336,6 +349,7 @@ type Twstat struct {
 // succesfully updated. Once Rwstat is called, future responses
 // to Tstat requests should reflect the provided changes.
 func (t Twstat) Rwstat() {
+	t.sent = true
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rwstat(t.tag)
 }
