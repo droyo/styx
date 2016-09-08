@@ -43,23 +43,6 @@ type dirReader struct {
 	path string
 }
 
-func modePerm(mode os.FileMode) uint32 {
-	var perm uint32
-	if mode&os.ModeDir != 0 {
-		perm |= styxproto.DMDIR
-	}
-	if mode&os.ModeAppend != 0 {
-		perm |= styxproto.DMAPPEND
-	}
-	if mode&os.ModeExclusive != 0 {
-		perm |= styxproto.DMEXCL
-	}
-	if mode&os.ModeTemporary != 0 {
-		perm |= styxproto.DMTMP
-	}
-	return perm | uint32(mode&os.ModePerm)
-}
-
 func (d *dirReader) ReadAt(p []byte, offset int64) (int, error) {
 	d.Lock()
 	defer d.Unlock()
@@ -101,8 +84,8 @@ func marshalStats(buf []byte, files []os.FileInfo, dir string, pool *qidpool.Poo
 			break
 		}
 		n += len(stat)
-		mode := modePerm(fi.Mode())
-		qtype := uint8(mode >> 24)
+		mode := Mode9P(fi.Mode())
+		qtype := QidType(mode)
 
 		stat.SetMtime(uint32(fi.ModTime().Unix()))
 		stat.SetAtime(stat.Mtime())

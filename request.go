@@ -81,58 +81,6 @@ func newReqInfo(cx context.Context, s *Session, msg fcall, filepath string) reqI
 	}
 }
 
-func qidType(mode os.FileMode) uint8 {
-	var qtype uint8
-	if mode&os.ModeDir != 0 {
-		qtype = styxproto.QTDIR
-	}
-	if mode&os.ModeAppend != 0 {
-		qtype |= styxproto.QTAPPEND
-	}
-	if mode&os.ModeExclusive != 0 {
-		qtype |= styxproto.QTEXCL
-	}
-	if mode&os.ModeTemporary != 0 {
-		qtype |= styxproto.QTTMP
-	}
-	return qtype
-}
-
-func fileMode(perm uint32) os.FileMode {
-	var mode os.FileMode
-	if perm&styxproto.DMDIR != 0 {
-		mode = os.ModeDir
-	}
-	if perm&styxproto.DMAPPEND != 0 {
-		mode |= os.ModeAppend
-	}
-	if perm&styxproto.DMEXCL != 0 {
-		mode |= os.ModeExclusive
-	}
-	if perm&styxproto.DMTMP != 0 {
-		mode |= os.ModeTemporary
-	}
-	mode |= (os.FileMode(perm) & os.ModePerm)
-	return mode
-}
-
-func modePerm(mode os.FileMode) uint32 {
-	var perm uint32
-	if mode&os.ModeDir != 0 {
-		perm |= styxproto.DMDIR
-	}
-	if mode&os.ModeAppend != 0 {
-		perm |= styxproto.DMAPPEND
-	}
-	if mode&os.ModeExclusive != 0 {
-		perm |= styxproto.DMEXCL
-	}
-	if mode&os.ModeTemporary != 0 {
-		perm |= styxproto.DMTMP
-	}
-	return perm | uint32(mode&os.ModePerm)
-}
-
 // A Topen message is sent when a client wants to open a file for I/O
 // Use the Ropen method to provide the opened file.
 //
@@ -182,7 +130,8 @@ func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 	t.session.files.Update(t.fid, &file, func() {
 		file.rwc = f
 	})
-	qid := t.session.conn.qid(t.Path(), qidType(mode))
+	qidtype := styxfile.QidType(styxfile.Mode9P(mode))
+	qid := t.session.conn.qid(t.Path(), qidtype)
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Ropen(t.tag, qid, 0)
 }
@@ -218,11 +167,12 @@ func (t Tstat) Rstat(info os.FileInfo) {
 		// should never happen
 		panic(err)
 	}
+	mode := styxfile.Mode9P(info.Mode())
 	stat.SetLength(info.Size())
-	stat.SetMode(modePerm(info.Mode()))
+	stat.SetMode(mode)
 	stat.SetAtime(uint32(info.ModTime().Unix())) // TODO: get atime
 	stat.SetMtime(uint32(info.ModTime().Unix()))
-	stat.SetQid(t.session.conn.qid(t.Path(), qidType(info.Mode())))
+	stat.SetQid(t.session.conn.qid(t.Path(), styxfile.QidType(mode)))
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rstat(t.tag, stat)
 }
@@ -284,7 +234,7 @@ func (t Tcreate) Rcreate(rwc interface{}) {
 	// so there is no increase in references to this session.
 	t.session.files.Put(t.fid, file)
 
-	qtype := qidType(t.Perm)
+	qtype := styxfile.QidType(styxfile.Mode9P(t.Perm))
 	qid := t.session.conn.qid(file.name, qtype)
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rcreate(t.tag, qid, 0)
@@ -365,7 +315,7 @@ func (s statInfo) Name() string { return string(styxproto.Stat(s).Name()) }
 func (s statInfo) Size() int64  { return styxproto.Stat(s).Length() }
 
 func (s statInfo) Mode() os.FileMode {
-	return fileMode(styxproto.Stat(s).Mode())
+	return styxfile.ModeOS(styxproto.Stat(s).Mode())
 }
 
 func (s statInfo) ModTime() time.Time {

@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/styxproto"
 )
 
@@ -157,7 +158,7 @@ type Twalk struct {
 // are sent to the client.
 func (t Twalk) Rwalk(mode os.FileMode) {
 	t.sent = true
-	qid := t.session.conn.qid(t.Path(), qidType(mode))
+	qid := t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
 	select {
 	case t.walk.collect <- walkElem{qid: qid, index: t.index}:
 	case <-t.walk.complete:

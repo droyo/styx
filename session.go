@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 )
@@ -207,7 +208,7 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 	}
 	s.requests <- Tcreate{
 		Name:    string(msg.Name()),
-		Perm:    fileMode(msg.Perm()),
+		Perm:    styxfile.ModeOS(msg.Perm()),
 		Flag:    openFlag(msg.Mode()),
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}
