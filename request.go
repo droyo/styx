@@ -99,6 +99,11 @@ type Topen struct {
 // the file. Types that only implement Read or Write operations will return
 // errors on writes and reads, respectively.
 //
+// If rwc implements the Stat method of os.File, that will be used to
+// answer Tstat requests. Otherwise, the styx package will assemble Rstat
+// responses out of default values merged with any methods rwc provides
+// from the os.FileInfo interface.
+//
 // If a file does not implement any of the Read or Write interfaces in
 // the io package, A generic error is returned to the client, and a message
 // will be written to the server's ErrorLog.

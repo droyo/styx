@@ -223,8 +223,8 @@ func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file 
 }
 
 func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file) bool {
+	buf := make([]byte, styxproto.MaxStatLen)
 	if file.auth {
-		buf := make([]byte, styxproto.MaxStatLen)
 		stat, _, err := styxproto.NewStat(buf, "", "", "", "")
 		if err != nil {
 			// input is not user-controlled, this should
@@ -235,10 +235,19 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 		stat.SetQid(s.conn.qid("", styxproto.QTAUTH))
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rstat(msg.Tag(), stat)
-		return true
-	}
-	s.requests <- Tstat{
-		reqInfo: newReqInfo(cx, s, msg, file.name),
+	} else if file.rwc != nil {
+		s.conn.clearTag(msg.Tag())
+		if qid, ok := s.conn.qidpool.Get(file.name); !ok {
+			s.conn.Rerror(msg.Tag(), "qid for %s not found", file.name)
+		} else if stat, err := styxfile.Stat(buf, file.rwc, file.name, qid); err != nil {
+			s.conn.Rerror(msg.Tag(), "%s", err)
+		} else {
+			s.conn.Rstat(msg.Tag(), stat)
+		}
+	} else {
+		s.requests <- Tstat{
+			reqInfo: newReqInfo(cx, s, msg, file.name),
+		}
 	}
 	return true
 }

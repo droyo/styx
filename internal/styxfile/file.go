@@ -6,6 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"time"
+
+	"aqwari.net/net/styx/internal/sys"
+	"aqwari.net/net/styx/styxproto"
 )
 
 // 9P read/write requests contain an offset. This makes them
@@ -62,4 +67,97 @@ func New(rwc interface{}) (Interface, error) {
 		return &dumbPipe{rwc: rwc}, nil
 	}
 	return nil, fmt.Errorf("Cannot convert type %T into a styxfile.Interface")
+}
+
+// Stat produces a styxproto.Stat from an open file. If the value
+// provides a Stat method matching that of os.File, that is used.
+// Otherwise, the styxfile package determines the file's attributes
+// based on other characteristics.
+func Stat(buf []byte, file Interface, name string, qid styxproto.Qid) (styxproto.Stat, error) {
+	var (
+		fi  os.FileInfo
+		err error
+	)
+	type hasStat interface {
+		Stat() (os.FileInfo, error)
+	}
+	if v, ok := file.(hasStat); ok {
+		fi, err = v.Stat()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		fi = statGuess{file, name, qid.Type()}
+	}
+	uid, gid, muid := sys.FileOwner(fi)
+	stat, _, err := styxproto.NewStat(buf, fi.Name(), uid, gid, muid)
+	if err != nil {
+		return nil, err
+	}
+	stat.SetLength(fi.Size())
+	stat.SetMode(Mode9P(fi.Mode()))
+	stat.SetAtime(uint32(fi.ModTime().Unix()))
+	stat.SetMtime(uint32(fi.ModTime().Unix()))
+	stat.SetQid(qid)
+	return stat, nil
+}
+
+type statGuess struct {
+	file  Interface
+	name  string
+	qtype uint8
+}
+
+func (sg statGuess) Name() string {
+	type hasName interface {
+		Name() string
+	}
+	if v, ok := sg.file.(hasName); ok {
+		return v.Name()
+	}
+	return sg.name
+}
+
+func (sg statGuess) Size() int64 {
+	type hasSize interface {
+		Size() int64
+	}
+	if v, ok := sg.file.(hasSize); ok {
+		return v.Size()
+	}
+	return -1
+}
+
+func (sg statGuess) Mode() os.FileMode {
+	type hasMode interface {
+		Mode() os.FileMode
+	}
+	if v, ok := sg.file.(hasMode); ok {
+		return v.Mode()
+	}
+	return ModeOS(uint32(sg.qtype)<<24) | 0777
+}
+
+func (sg statGuess) IsDir() bool {
+	type hasDir interface {
+		IsDir() bool
+	}
+	if v, ok := sg.file.(hasDir); ok {
+		return v.IsDir()
+	}
+	return sg.Mode().IsDir()
+}
+
+func (sg statGuess) ModTime() time.Time {
+	type hasTime interface {
+		ModTime() time.Time
+	}
+	if v, ok := sg.file.(hasTime); ok {
+		return v.ModTime()
+	}
+	return time.Time{}
+}
+
+func (sg statGuess) Sys() interface{} {
+	return sg.file
 }
