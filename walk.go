@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"golang.org/x/net/context"
 
@@ -54,7 +55,7 @@ type walkElem struct {
 
 type walker struct {
 	qids, found []styxproto.Qid
-	filled      []bool
+	filled      []int32
 	count       int
 	complete    chan struct{}
 	collect     chan walkElem
@@ -75,7 +76,7 @@ func newWalker(s *Session, cx context.Context, msg styxproto.Twalk, base string,
 	w := &walker{
 		qids:     qids,
 		found:    found,
-		filled:   make([]bool, len(elem)),
+		filled:   make([]int32, len(elem)),
 		complete: make(chan struct{}),
 		collect:  make(chan walkElem),
 		session:  s,
@@ -99,11 +100,11 @@ Loop:
 			if !ok {
 				break Loop
 			}
-			if w.filled[el.index] {
+			filledp := &w.filled[el.index]
+			if !atomic.CompareAndSwapInt32(filledp, 0, 1) {
 				continue
 			}
 			w.count++
-			w.filled[el.index] = true
 			w.qids[el.index] = el.qid
 			for i := len(w.found); i < cap(w.found); i++ {
 				if w.qids[i] != nil {
@@ -152,12 +153,15 @@ type Twalk struct {
 	reqInfo
 }
 
+func (t Twalk) handled() bool {
+	return atomic.LoadInt32(&t.walk.filled[t.index]) == 1
+}
+
 // Rwalk signals to the client that the file named by the Twalk's
 // Path method exists and is of the given mode. The permission bits of
 // mode are ignored, and only the file type bits, such as os.ModeDir,
 // are sent to the client.
 func (t Twalk) Rwalk(mode os.FileMode) {
-	t.sent = true
 	qid := t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
 	select {
 	case t.walk.collect <- walkElem{qid: qid, index: t.index}:
@@ -168,7 +172,6 @@ func (t Twalk) Rwalk(mode os.FileMode) {
 // Rerror signals to the client that the file named by the Twalk's
 // Path method does not exist.
 func (t Twalk) Rerror(format string, args ...interface{}) {
-	t.sent = true
 	select {
 	case t.walk.collect <- walkElem{index: t.index}:
 	case <-t.walk.complete:

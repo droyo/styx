@@ -48,13 +48,11 @@ type reqInfo struct {
 	session *Session
 	msg     styxproto.Msg
 	path    string
-
-	// used to handle default responses
-	sent bool
 }
 
 func (info reqInfo) handled() bool {
-	return info.sent
+	_, ok := info.session.conn.pendingReq.Get(info.tag)
+	return ok
 }
 
 // Path returns the absolute path of the file being operated on.
@@ -64,7 +62,6 @@ func (info reqInfo) Path() string {
 
 // Rerror sends an error to the client.
 func (info reqInfo) Rerror(format string, args ...interface{}) {
-	info.sent = true
 	info.session.conn.clearTag(info.tag)
 	info.session.conn.Rerror(info.tag, format, args...)
 }
@@ -106,7 +103,6 @@ type Topen struct {
 // the io package, A generic error is returned to the client, and a message
 // will be written to the server's ErrorLog.
 func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
-	t.sent = true
 	var (
 		file file
 		f    styxfile.Interface
@@ -154,7 +150,6 @@ type Tstat struct {
 // will attempt to resolve the names of the file's owner and group. If
 // that cannot be done, an empty string is sent.
 func (t Tstat) Rstat(info os.FileInfo) {
-	t.sent = true
 	buf := make([]byte, styxproto.MaxStatLen)
 	uid, gid, muid := sys.FileOwner(info)
 	name := info.Name()
@@ -212,7 +207,6 @@ func (t Tcreate) Path() string {
 // rwc must meet the same criteria listed for the Ropen method of a Topen
 // request.
 func (t Tcreate) Rcreate(rwc interface{}) {
-	t.sent = true
 	var (
 		f   styxfile.Interface
 		err error
@@ -263,7 +257,6 @@ type Tremove struct {
 // If err is non-nil, an Rerror message is sent to the client. Regardless, the
 // file handle is no longer valid.
 func (t Tremove) Rremove(err error) {
-	t.sent = true
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
 

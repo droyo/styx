@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"aqwari.net/net/styx/internal/styxfile"
@@ -35,23 +36,26 @@ import (
 // This is OK, we'll make the type generic enough for both.
 type twstat struct {
 	status chan error
+	filled []int32
+	index  int
 	reqInfo
 }
 
 // Call Rerror to provide a descriptive error message explaining
 // why a file attribute could not be updated.
 func (t twstat) Rerror(format string, args ...interface{}) {
-	if !t.sent {
-		t.sent = true
-		t.status <- fmt.Errorf(format, args...)
-	}
+	t.respond(fmt.Errorf(format, args...))
 }
 
 func (t twstat) respond(err error) {
-	if !t.sent {
-		t.sent = true
+	p := &t.filled[t.index]
+	if atomic.CompareAndSwapInt32(p, 0, 1) {
 		t.status <- err
 	}
+}
+
+func (t twstat) handled() bool {
+	return atomic.LoadInt32(&t.filled[t.index]) == 1
 }
 
 func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
@@ -71,50 +75,51 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 	// methods for each attribute do not block.
 	status := make(chan error, numMutable)
 	info := newReqInfo(cx, s, msg, file.name)
+	filled := make([]int32, numMutable)
 
 	atime, mtime := stat.Atime(), stat.Mtime()
 	if atime != math.MaxUint32 || mtime != math.MaxUint32 {
-		messages++
 		haveChanges = true
 		s.requests <- Tutimes{
 			Atime:  time.Unix(int64(atime), 0),
 			Mtime:  time.Unix(int64(mtime), 0),
-			twstat: twstat{status, info},
+			twstat: twstat{status, filled, messages, info},
 		}
+		messages++
 	}
 	if uid, gid := string(stat.Uid()), string(stat.Gid()); uid != "" || gid != "" {
-		messages++
 		haveChanges = true
 		s.requests <- Tchown{
 			User:   uid,
 			Group:  gid,
-			twstat: twstat{status, info},
+			twstat: twstat{status, filled, messages, info},
 		}
+		messages++
 	}
 	if name := string(stat.Name()); name != "" && name != file.name {
-		messages++
 		haveChanges = true
 		s.requests <- Trename{
 			OldPath: file.name,
 			NewPath: name,
-			twstat:  twstat{status, info},
+			twstat:  twstat{status, filled, messages, info},
 		}
+		messages++
 	}
 	if length := stat.Length(); length != -1 {
-		messages++
 		haveChanges = true
 		s.requests <- Ttruncate{
 			Size:   length,
-			twstat: twstat{status, info},
+			twstat: twstat{status, filled, messages, info},
 		}
+		messages++
 	}
 	if stat.Mode() != math.MaxUint32 {
-		messages++
 		haveChanges = true
 		s.requests <- Tchmod{
 			Mode:   styxfile.ModeOS(stat.Mode()),
-			twstat: twstat{status, info},
+			twstat: twstat{status, filled, messages, info},
 		}
+		messages++
 	}
 	if len(stat.Muid()) != 0 {
 		// even though we won't respond to this field, we don't
@@ -122,10 +127,10 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 		haveChanges = true
 	}
 	if !haveChanges {
-		messages++
 		s.requests <- Tsync{
-			twstat: twstat{status, info},
+			twstat: twstat{status, filled, messages, info},
 		}
+		messages++
 	}
 
 	go func() {
@@ -180,14 +185,12 @@ func (t Trename) Rrename(err error) {
 	// BUG(droyo) renaming a file with one fid will break Twalk
 	// requests that attempt to clone another fid pointing to the
 	// same file.
-	if !t.sent {
-		if err == nil {
-			t.session.qidpool.Do(func(m map[interface{}]interface{}) {
-				if qid, ok := m[t.OldPath]; ok {
-					m[t.NewPath] = qid
-				}
-			})
-		}
+	if err == nil {
+		t.session.qidpool.Do(func(m map[interface{}]interface{}) {
+			if qid, ok := m[t.OldPath]; ok {
+				m[t.NewPath] = qid
+			}
+		})
 	}
 	t.respond(err)
 }
