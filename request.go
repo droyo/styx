@@ -259,20 +259,28 @@ type Tremove struct {
 // with the file continue to be usable for I/O is implementation-defined;
 // many Unix file systems allow a process to continue writing to a file that
 // has been "unlinked", so long as the process has an open file descriptor.
-func (t Tremove) Rremove() {
+//
+// If err is non-nil, an Rerror message is sent to the client. Regardless, the
+// file handle is no longer valid.
+func (t Tremove) Rremove(err error) {
 	t.sent = true
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
+
+	t.session.conn.clearTag(t.tag)
 
 	// NOTE(droyo): This is not entirely correct; if the server wants
 	// to implement unix-like semantics (the file hangs around as
 	// long as there's 1 descriptor for it), we should not delete the
 	// qid until *all* references to it are removed. We'll need to implement
 	// reference counting for that :\
-	t.session.conn.qidpool.Del(t.Path())
+	if err != nil {
+		t.session.conn.Rerror(t.tag, "%s", err)
+	} else {
+		t.session.conn.qidpool.Del(t.Path())
+		t.session.conn.Rremove(t.tag)
+	}
 
-	t.session.conn.clearTag(t.tag)
-	t.session.conn.Rremove(t.tag)
 	if !t.session.DecRef() {
 		t.session.close()
 	}
