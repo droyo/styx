@@ -22,6 +22,11 @@ type Request interface {
 	// on the channel returned by Done().
 	context.Context
 
+	// WithContext returns a copy of the request with a new Context. It
+	// can be used with nested handlers to attach information, deadlines,
+	// and cancellations to a request.
+	WithContext(context.Context) Request
+
 	// If a request is invalid, not allowed, or cannot be completed properly
 	// for some other reason, its Rerror method should be used to respond
 	// to it.
@@ -89,6 +94,11 @@ type Topen struct {
 	reqInfo
 }
 
+func (t Topen) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
+}
+
 // The Ropen method signals to the client that a file has succesfully
 // been opened and is ready for I/O. After Ropen returns, future reads
 // and writes to the opened file handle will pass through rwc.
@@ -150,6 +160,11 @@ type Tstat struct {
 	reqInfo
 }
 
+func (t Tstat) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
+}
+
 // Rstat responds to a succesful Tstat request. The styx package will
 // translate the os.FileInfo value into the appropriate 9P structure. Rstat
 // will attempt to resolve the names of the file's owner and group. If
@@ -192,6 +207,11 @@ type Tcreate struct {
 	Perm os.FileMode // permissions and file type to create
 	Flag int         // flags to open the new file with
 	reqInfo
+}
+
+func (t Tcreate) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
 }
 
 // NewPath joins the path for the Tcreate's containing directory
@@ -250,6 +270,11 @@ func (t Tcreate) defaultResponse() {
 // saying "permission denied".
 type Tremove struct {
 	reqInfo
+}
+
+func (t Tremove) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
 }
 
 // Rremove signals to the client that a file has been succesfully

@@ -153,6 +153,11 @@ type Twalk struct {
 	reqInfo
 }
 
+func (t Twalk) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
+}
+
 func (t Twalk) handled() bool {
 	return atomic.LoadInt32(&t.walk.filled[t.index]) == 1
 }

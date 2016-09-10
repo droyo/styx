@@ -1,7 +1,6 @@
 package styx
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"os"
@@ -10,6 +9,7 @@ import (
 
 	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/styxproto"
+	"golang.org/x/net/context"
 )
 
 // In the plan 9 manual, stat(5) has this to say about modifying
@@ -172,6 +172,11 @@ type Trename struct {
 	twstat
 }
 
+func (t Trename) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
+}
+
 // The Path method of a Trename request returns the current path
 // to the file, before a rename has taken place.
 func (t Trename) Path() string {
@@ -206,6 +211,11 @@ type Tchmod struct {
 	twstat
 }
 
+func (t Tchmod) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
+}
+
 // Rchmod, when called with a nil error, indicates that the permissions
 // of the file were updated. Future stat requests should reflect the new
 // file mode.
@@ -219,6 +229,11 @@ func (t Tchmod) Rchmod(err error) { t.respond(err) }
 type Tutimes struct {
 	Atime, Mtime time.Time
 	twstat
+}
+
+func (t Tutimes) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
 }
 
 // Rutimes, when called with a nil error, indicates that the file
@@ -240,6 +255,11 @@ type Tchown struct {
 	twstat
 }
 
+func (t Tchown) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
+}
+
 // Rchown, when called with a nil error, indicates that file and group
 // ownership attributes were updated for the given file. Future stat
 // requests for the same file should reflect the changes.
@@ -255,6 +275,11 @@ type Ttruncate struct {
 	twstat
 }
 
+func (t Ttruncate) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
+}
+
 // Rtruncate, when called with a nil error, indicates that the file has been
 // updated to reflect Size. Future reads, writes and stats should reflect
 // the new file length.
@@ -268,6 +293,11 @@ func (t Ttruncate) Rtruncate(err error) { t.respond(err) }
 // "not supported".
 type Tsync struct {
 	twstat
+}
+
+func (t Tsync) WithContext(ctx context.Context) Request {
+	t.Context = ctx
+	return t
 }
 
 // Rsync, when called with a nil error, indicates that the file has
