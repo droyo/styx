@@ -5,7 +5,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 
 	"golang.org/x/net/context"
 
@@ -50,8 +49,8 @@ type Session struct {
 	// providing the Serve9P API that ties a session lifetime
 	// to the lifetime of a single function call, we must be able
 	// to pass a request along the line and wait for any downstream
-	// handlers to finish processing it.
-	waiting *sync.WaitGroup
+	// handlers to finish processing it. This channel coordinates that.
+	pipeline chan Request
 
 	// Sends nil once auth is successful, err otherwise.
 	// Closed after authentication is complete, so can only
@@ -122,10 +121,18 @@ func (s *Session) fetchFile(fid uint32) (file, bool) {
 // for that type. Next returns false if the session has ended or there was an
 // error receiving the next Request.
 func (s *Session) Next() bool {
-	if s.req != nil && !s.req.handled() {
-		s.req.defaultResponse()
-	}
 	var ok bool
+	if s.req != nil {
+		if !s.req.handled() {
+			if s.pipeline != nil { // this is a nested handler
+				s.pipeline <- s.req
+			} else {
+				s.req.defaultResponse()
+			}
+		} else if s.pipeline != nil {
+			s.pipeline <- nil
+		}
+	}
 	s.req, ok = <-s.requests
 	return ok
 }
@@ -134,6 +141,14 @@ func (s *Session) Next() bool {
 // only valid until the next call to Next.
 func (s *Session) Request() Request {
 	return s.req
+}
+
+// When multiple Handlers are combined together using Stack, a handler
+// may modify the incoming request using the UpdateRequest method.
+// The current request will be overwritten with r, and reflected in calls
+// to the Request method in he current and all downstream handlers.
+func (s *Session) UpdateRequest(r Request) {
+	s.req = r
 }
 
 func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file) bool {
