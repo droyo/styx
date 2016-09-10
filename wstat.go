@@ -173,7 +173,7 @@ type Trename struct {
 }
 
 func (t Trename) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -212,7 +212,7 @@ type Tchmod struct {
 }
 
 func (t Tchmod) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -232,7 +232,7 @@ type Tutimes struct {
 }
 
 func (t Tutimes) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -256,7 +256,7 @@ type Tchown struct {
 }
 
 func (t Tchown) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -276,7 +276,7 @@ type Ttruncate struct {
 }
 
 func (t Ttruncate) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -296,7 +296,7 @@ type Tsync struct {
 }
 
 func (t Tsync) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 

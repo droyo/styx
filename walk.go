@@ -154,7 +154,7 @@ type Twalk struct {
 }
 
 func (t Twalk) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 

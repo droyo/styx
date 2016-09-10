@@ -16,11 +16,11 @@ import (
 // checking if a file exists (Twalk) to opening a file (Topen)
 // to changing a file's name (Twstat).
 type Request interface {
-	// The context.Context interface is used to implement cancellation and
-	// request timeouts. If an operation is going to take a long time to
-	// complete, you can allow for the client to cancel the request by receiving
-	// on the channel returned by Done().
-	context.Context
+	// Context is used to implement cancellation and request timeouts. If
+	// an operation is going to take a long time to complete, you can
+	// allow for the client to cancel the request by receiving on the
+	// channel returned by the Context's Done method.
+	Context() context.Context
 
 	// WithContext returns a copy of the request with a new Context. It
 	// can be used with nested handlers to attach information, deadlines,
@@ -47,7 +47,7 @@ type Request interface {
 // common fields among all requests. Some may be nil for
 // certain requests.
 type reqInfo struct {
-	context.Context
+	ctx     context.Context
 	tag     uint16
 	fid     uint32
 	session *Session
@@ -58,6 +58,11 @@ type reqInfo struct {
 func (info reqInfo) handled() bool {
 	_, ok := info.session.conn.pendingReq.Get(info.tag)
 	return ok
+}
+
+// Context returns the context associated with the request.
+func (info reqInfo) Context() context.Context {
+	return info.ctx
 }
 
 // Path returns the absolute path of the file being operated on.
@@ -76,7 +81,7 @@ func newReqInfo(cx context.Context, s *Session, msg fcall, filepath string) reqI
 		session: s,
 		tag:     msg.Tag(),
 		fid:     msg.Fid(),
-		Context: cx,
+		ctx:     cx,
 		msg:     msg,
 		path:    filepath,
 	}
@@ -95,7 +100,7 @@ type Topen struct {
 }
 
 func (t Topen) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -161,7 +166,7 @@ type Tstat struct {
 }
 
 func (t Tstat) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -210,7 +215,7 @@ type Tcreate struct {
 }
 
 func (t Tcreate) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
@@ -273,7 +278,7 @@ type Tremove struct {
 }
 
 func (t Tremove) WithContext(ctx context.Context) Request {
-	t.Context = ctx
+	t.ctx = ctx
 	return t
 }
 
