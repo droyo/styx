@@ -128,6 +128,7 @@ Loop:
 			panic(err) // should never happen
 		}
 	}
+	w.session.conn.Flush()
 }
 
 // A client sends a Twalk message both to probe if a file exists, and to

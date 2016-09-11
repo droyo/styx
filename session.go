@@ -122,6 +122,9 @@ func (s *Session) fetchFile(fid uint32) (file, bool) {
 // error receiving the next Request.
 func (s *Session) Next() bool {
 	var ok bool
+	if s.conn.Flush() != nil {
+		return false
+	}
 	if s.req != nil {
 		if !s.req.handled() {
 			if s.pipeline != nil { // this is a nested handler
@@ -163,6 +166,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 		if _, ok := s.conn.sessionFid.Get(newfid); ok {
 			s.conn.clearTag(msg.Tag())
 			s.conn.Rerror(msg.Tag(), "Twalk: fid %x already in use", newfid)
+			s.conn.Flush()
 			return false
 		}
 	}
@@ -179,6 +183,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 		}
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rwalk(msg.Tag())
+		s.conn.Flush()
 		return true
 	}
 
@@ -204,6 +209,7 @@ func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file
 	if file.rwc != nil {
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "fid %d already open", msg.Fid())
+		s.conn.Flush()
 		return true
 	}
 	flag := openFlag(msg.Mode())
@@ -217,8 +223,9 @@ func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file
 func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file file) bool {
 	qid := s.conn.qid(file.name, 0)
 	if qid.Type()&styxproto.QTDIR == 0 {
-		s.conn.Rerror(msg.Tag(), "not a directory: %q", file.name)
 		s.conn.clearTag(msg.Tag())
+		s.conn.Rerror(msg.Tag(), "not a directory: %q", file.name)
+		s.conn.Flush()
 		return false
 	}
 	s.requests <- Tcreate{
@@ -271,6 +278,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 	if file.rwc == nil {
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %s is not open for reading", file.name)
+		s.conn.Flush()
 		return false
 	}
 
@@ -286,11 +294,14 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 	n, err := file.rwc.ReadAt(buf, msg.Offset())
 
 	s.conn.clearTag(msg.Tag())
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+	if n > 0 {
+		s.conn.Rread(msg.Tag(), buf[:n])
+	} else if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		s.conn.Rerror(msg.Tag(), "%v", err)
 	} else {
 		s.conn.Rread(msg.Tag(), buf[:n])
 	}
+	s.conn.Flush()
 	return true
 }
 
@@ -298,6 +309,7 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 	if file.rwc == nil {
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %q is not opened for writing", file.name)
+		s.conn.Flush()
 		return false
 	}
 
@@ -310,19 +322,24 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 	} else {
 		s.conn.Rwrite(msg.Tag(), n)
 	}
+	s.conn.Flush()
 	return true
 }
 
 func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file file) bool {
+	defer s.conn.Flush()
 	s.conn.sessionFid.Del(msg.Fid())
+	s.conn.clearTag(msg.Tag())
+	s.files.Del(msg.Fid())
 	if file.rwc != nil {
 		if err := file.rwc.Close(); err != nil {
 			s.conn.Rerror(msg.Tag(), "close %s: %v", file.name, err)
+		} else {
+			s.conn.Rclunk(msg.Tag())
 		}
+	} else {
+		s.conn.Rclunk(msg.Tag())
 	}
-	s.files.Del(msg.Fid())
-	s.conn.clearTag(msg.Tag())
-	s.conn.Rclunk(msg.Tag())
 	if !s.DecRef() {
 		s.endSession()
 	}

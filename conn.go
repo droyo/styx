@@ -179,10 +179,13 @@ func (c *conn) serve() {
 		return
 	}
 
-	for c.Next() {
+	for c.Next() && c.Encoder.Err() == nil {
 		if !c.handleMessage(c.Msg()) {
 			break
 		}
+	}
+	if err := c.Encoder.Err(); err != nil {
+		c.srv.logf("write error: %s", err)
 	}
 	c.srv.logf("closed connection from %s", c.remoteAddr())
 }
@@ -222,17 +225,16 @@ func (c *conn) acceptTversion() bool {
 	c.Encoder.MaxSize = c.msize
 	c.Decoder.MaxSize = c.msize
 
-Loop:
-	for c.Next() {
+	for c.Next() && c.Encoder.Err() == nil {
 		tver, ok := c.Msg().(styxproto.Tversion)
 		if !ok {
 			c.Rerror(tver.Tag(), "need Tversion")
-			break Loop
+			break
 		}
 		msize := tver.Msize()
 		if msize < styxproto.MinBufSize {
 			c.Rerror(tver.Tag(), "buffer too small")
-			break Loop
+			break
 		}
 		if msize < c.msize {
 			c.msize = msize
@@ -241,10 +243,15 @@ Loop:
 		}
 		if !bytes.HasPrefix(tver.Version(), []byte("9P2000")) {
 			c.Rversion(uint32(c.msize), "unknown")
+			c.Flush()
+		} else {
+			c.Rversion(uint32(c.msize), "9P2000")
+			c.Flush()
+			return true
 		}
-		c.Rversion(uint32(c.msize), "9P2000")
-		return true
 	}
+	c.Flush()
+	c.srv.logf("%s version negotiation failed", c.remoteAddr())
 	return false
 }
 
@@ -256,6 +263,7 @@ Loop:
 // - Setting a per-connection session limit
 // - close connections that have not established a session in N seconds
 func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
+	defer c.Flush()
 	if c.srv.Auth == nil {
 		c.clearTag(m.Tag())
 		c.Rerror(m.Tag(), "%s", errNotSupported)
@@ -289,6 +297,7 @@ func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
 }
 
 func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
+	defer c.Flush()
 	var handler Handler = HandlerFunc(func(s *Session) {
 		for s.Next() {
 		}
@@ -339,6 +348,7 @@ func (c *conn) handleTflush(cx context.Context, m styxproto.Tflush) bool {
 	c.clearTag(m.Tag())
 
 	c.Rflush(m.Tag())
+	c.Flush()
 	return true
 }
 
@@ -346,6 +356,7 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 	s, ok := c.sessionByFid(msg.Fid())
 	if !ok {
 		c.Rerror(msg.Tag(), "%s", errNoFid)
+		c.Flush()
 		return false
 	}
 
@@ -369,8 +380,9 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 		case styxproto.Tstat:
 		case styxproto.Tclunk:
 		default:
-			c.Rerror(msg.Tag(), "%T not allowed on afid", msg)
 			c.clearTag(msg.Tag())
+			c.Rerror(msg.Tag(), "%T not allowed on afid", msg)
+			c.Flush()
 			return false
 		}
 	}

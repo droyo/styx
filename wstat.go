@@ -153,6 +153,7 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 		} else {
 			s.conn.Rerror(msg.Tag(), "%s", err)
 		}
+		s.conn.Flush()
 	}()
 
 	return true
