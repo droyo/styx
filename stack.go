@@ -8,13 +8,15 @@ package styx
 // by any handlers in the chain, the documented default response for that
 // message type will be sent.
 func Stack(handlers ...Handler) Handler {
-	return stack(handlers)
+	h := make([]Handler, len(handlers))
+	copy(h, handlers)
+	return stack(h)
 }
 
 type stack []Handler
 
 func (handlers stack) Serve9P(s *Session) {
-	stack := make([]*Session, 0, len(handlers))
+	running := make([]*Session, 0, len(handlers))
 	for _, h := range handlers {
 		session := *s
 		session.requests = make(chan Request)
@@ -23,10 +25,11 @@ func (handlers stack) Serve9P(s *Session) {
 			h.Serve9P(&session)
 			close(session.pipeline)
 		}()
+		running = append(running, &session)
 	}
 	for s.Next() {
 		req := s.Request()
-		for _, h := range stack {
+		for _, h := range running {
 			h.requests <- req
 			if next, ok := <-h.pipeline; !ok {
 				// A handler has exited prematurely. abort
@@ -40,7 +43,7 @@ func (handlers stack) Serve9P(s *Session) {
 	}
 
 Cleanup:
-	for _, h := range stack {
+	for _, h := range running {
 		close(h.requests)
 
 		// Wait for the handler to exit
