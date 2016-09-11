@@ -173,3 +173,16 @@ have to install.
 
 current method of detecting already sent messages is no good,
 since we're not passing pointers, we're passing the full type.
+
+
+more docs
+demo servers
+cleanup auth API
+more tests & examples
+
+RACE CONDITION
+
+Use of pendingReq to check if a request has been handled is racy,
+because a new request with the same tag may arrive between the
+time the tag was released and the Serve9P method checks if the
+tag is gone.
