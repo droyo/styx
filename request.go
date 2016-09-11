@@ -57,7 +57,11 @@ type reqInfo struct {
 
 func (info reqInfo) handled() bool {
 	_, ok := info.session.conn.pendingReq.Get(info.tag)
-	return ok
+	return !ok
+}
+
+func (info reqInfo) defaultResponse() {
+	info.Rerror("permission denied.")
 }
 
 // Context returns the context associated with the request.
@@ -151,10 +155,6 @@ func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 	t.session.conn.Ropen(t.tag, qid, 0)
 }
 
-func (t Topen) defaultResponse() {
-	t.Rerror("permission denied")
-}
-
 // A Tstat message is sent when a client wants metadata about a file.
 // A client should have read access to the file's containing directory.
 // Call the Rstat method for a succesful request.
@@ -194,10 +194,6 @@ func (t Tstat) Rstat(info os.FileInfo) {
 	stat.SetQid(t.session.conn.qid(t.Path(), styxfile.QidType(mode)))
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rstat(t.tag, stat)
-}
-
-func (t Tstat) defaultResponse() {
-	t.Rerror("permission denied")
 }
 
 // A Tcreate message is sent when a client wants to create a new file
@@ -263,10 +259,6 @@ func (t Tcreate) Rcreate(rwc interface{}) {
 	t.session.conn.Rcreate(t.tag, qid, 0)
 }
 
-func (t Tcreate) defaultResponse() {
-	t.Rerror("permission denied")
-}
-
 // A Tremove message is sent when a client wants to delete a file
 // from the server. The Rremove method should be called once the
 // file has been succesfully deleted.
@@ -312,8 +304,4 @@ func (t Tremove) Rremove(err error) {
 	if !t.session.DecRef() {
 		t.session.close()
 	}
-}
-
-func (t Tremove) defaultResponse() {
-	t.Rerror("permission denied")
 }
