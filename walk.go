@@ -4,7 +4,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync/atomic"
 
 	"golang.org/x/net/context"
 
@@ -100,10 +99,6 @@ Loop:
 			if !ok {
 				break Loop
 			}
-			filledp := &w.filled[el.index]
-			if !atomic.CompareAndSwapInt32(filledp, 0, 1) {
-				continue
-			}
 			w.count++
 			w.qids[el.index] = el.qid
 			for i := len(w.found); i < cap(w.found); i++ {
@@ -160,7 +155,7 @@ func (t Twalk) WithContext(ctx context.Context) Request {
 }
 
 func (t Twalk) handled() bool {
-	return atomic.LoadInt32(&t.walk.filled[t.index]) == 1
+	return t.walk.filled[t.index] == 1
 }
 
 // Rwalk signals to the client that the file named by the Twalk's
@@ -169,6 +164,7 @@ func (t Twalk) handled() bool {
 // are sent to the client.
 func (t Twalk) Rwalk(mode os.FileMode) {
 	qid := t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
+	t.walk.filled[t.index] = 1
 	select {
 	case t.walk.collect <- walkElem{qid: qid, index: t.index}:
 	case <-t.walk.complete:
