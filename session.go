@@ -257,6 +257,7 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 		stat.SetQid(s.conn.qid("", styxproto.QTAUTH))
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rstat(msg.Tag(), stat)
+		s.conn.Flush()
 	} else if file.rwc != nil {
 		s.conn.clearTag(msg.Tag())
 		if qid, ok := s.conn.qidpool.Get(file.name); !ok {
@@ -266,6 +267,7 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 		} else {
 			s.conn.Rstat(msg.Tag(), stat)
 		}
+		s.conn.Flush()
 	} else {
 		s.requests <- Tstat{
 			reqInfo: newReqInfo(cx, s, msg, file.name),
