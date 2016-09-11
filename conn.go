@@ -211,9 +211,11 @@ func (c *conn) handleMessage(m styxproto.Msg) bool {
 		c.srv.logf("got bad message from %s: %s", c.remoteAddr(), m.Err)
 		c.clearTag(m.Tag())
 		c.Rerror(m.Tag(), "bad message: %s", m.Err)
+		c.Flush()
 		return true
 	default:
 		c.Rerror(m.Tag(), "unexpected %T message", m)
+		c.Flush()
 		return false
 	}
 	return true
