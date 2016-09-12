@@ -16,23 +16,24 @@ func Stack(handlers ...Handler) Handler {
 type stack []Handler
 
 func (handlers stack) Serve9P(s *Session) {
-	running := make([]*Session, 0, len(handlers))
-	for _, h := range handlers {
-		session := *s
-		session.requests = make(chan Request)
-		session.pipeline = make(chan Request)
-		go func() {
-			h.Serve9P(&session)
-			close(session.pipeline)
-		}()
-		running = append(running, &session)
+	running := make([]Session, len(handlers))
+	for i, handler := range handlers {
+		running[i] = *s
+		sub := &running[i]
+		sub.requests = make(chan Request)
+		sub.pipeline = make(chan Request)
+		go func(h Handler) {
+			h.Serve9P(sub)
+			close(sub.pipeline)
+		}(handler)
 	}
 	for s.Next() {
 		req := s.Request()
-		for _, h := range running {
-			req.setSession(h)
-			h.requests <- req
-			if next, ok := <-h.pipeline; !ok {
+		for i := range running {
+			session := &running[i]
+			req.setSession(session)
+			session.requests <- req
+			if next, ok := <-session.pipeline; !ok {
 				// A handler has exited prematurely. abort
 				goto Cleanup
 			} else if next == nil {
