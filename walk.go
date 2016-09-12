@@ -177,8 +177,8 @@ func (t Twalk) Rwalk(info os.FileInfo, err error) {
 	var qid styxproto.Qid
 	var mode os.FileMode
 	if err == nil {
-		qid = t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
 		mode = info.Mode()
+		qid = t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
 	}
 	t.walk.filled[t.index] = 1
 	elem := walkElem{qid: qid, index: t.index, err: err}
