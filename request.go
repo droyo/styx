@@ -42,6 +42,10 @@ type Request interface {
 	// has insufficient permissions or the file in question does not exist.
 	defaultResponse()
 	handled() bool
+
+	// Used for nested request handlers to swap a request between
+	// sub-sessions.
+	setSession(*Session)
 }
 
 // common fields among all requests. Some may be nil for
@@ -55,9 +59,12 @@ type reqInfo struct {
 	path    string
 }
 
+func (info reqInfo) setSession(new *Session) {
+	info.session = new
+}
+
 func (info reqInfo) handled() bool {
-	_, ok := info.session.conn.pendingReq.Get(info.tag)
-	return !ok
+	return !info.session.unhandled
 }
 
 func (info reqInfo) defaultResponse() {
@@ -76,6 +83,7 @@ func (info reqInfo) Path() string {
 
 // Rerror sends an error to the client.
 func (info reqInfo) Rerror(format string, args ...interface{}) {
+	info.session.unhandled = false
 	info.session.conn.clearTag(info.tag)
 	info.session.conn.Rerror(info.tag, format, args...)
 }
@@ -151,6 +159,7 @@ func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 	})
 	qidtype := styxfile.QidType(styxfile.Mode9P(mode))
 	qid := t.session.conn.qid(t.Path(), qidtype)
+	t.session.unhandled = false
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Ropen(t.tag, qid, 0)
 }
@@ -192,6 +201,7 @@ func (t Tstat) Rstat(info os.FileInfo) {
 	stat.SetAtime(uint32(info.ModTime().Unix())) // TODO: get atime
 	stat.SetMtime(uint32(info.ModTime().Unix()))
 	stat.SetQid(t.session.conn.qid(t.Path(), styxfile.QidType(mode)))
+	t.session.unhandled = false
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rstat(t.tag, stat)
 }
@@ -255,6 +265,7 @@ func (t Tcreate) Rcreate(rwc interface{}) {
 
 	qtype := styxfile.QidType(styxfile.Mode9P(t.Perm))
 	qid := t.session.conn.qid(file.name, qtype)
+	t.session.unhandled = false
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Rcreate(t.tag, qid, 0)
 }
@@ -287,6 +298,7 @@ func (t Tremove) Rremove(err error) {
 	t.session.conn.sessionFid.Del(t.fid)
 	t.session.files.Del(t.fid)
 
+	t.session.unhandled = false
 	t.session.conn.clearTag(t.tag)
 
 	// NOTE(droyo): This is not entirely correct; if the server wants

@@ -52,6 +52,9 @@ type Session struct {
 	// handlers to finish processing it. This channel coordinates that.
 	pipeline chan Request
 
+	// True when the current request is unanswered
+	unhandled bool
+
 	// Sends nil once auth is successful, err otherwise.
 	// Closed after authentication is complete, so can only
 	// be used once.
@@ -137,6 +140,9 @@ func (s *Session) Next() bool {
 		}
 	}
 	s.req, ok = <-s.requests
+	if ok {
+		s.unhandled = true
+	}
 	return ok
 }
 

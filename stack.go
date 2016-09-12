@@ -30,6 +30,7 @@ func (handlers stack) Serve9P(s *Session) {
 	for s.Next() {
 		req := s.Request()
 		for _, h := range running {
+			req.setSession(h)
 			h.requests <- req
 			if next, ok := <-h.pipeline; !ok {
 				// A handler has exited prematurely. abort
@@ -37,9 +38,13 @@ func (handlers stack) Serve9P(s *Session) {
 			} else if next == nil {
 				// The request has been handled, no point
 				// in passing it down the chain.
+				s.unhandled = false
 				break
+			} else {
+				req = next
 			}
 		}
+		req.setSession(s)
 	}
 
 Cleanup:
