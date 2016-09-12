@@ -13,59 +13,56 @@ import (
 	"aqwari.net/net/styx/styxproto"
 )
 
-// A Session is a 9P session. It begins when a user opens the root of
-// a file tree, and ends when all of its files are closed. Sessions
-// occur over a single connection and are associated with a single
-// user and root directory.  Over a single session, a user may perform
-// multiple operations on multiple files.  Sessions may be multiplexed
-// over a single connection.
+// A Session is a sequence of related 9P messages from a single client. It
+// begins when a client opens the root of a file tree, and ends when all of
+// its files are closed. Sessions occur over a single connection and are
+// associated with a single user and file tree. Over a single session,
+// a user may perform multiple operations on multiple files. Multiple
+// sessions may be multiplexed over a single connection.
 type Session struct {
-	// User is the name of the user associated with a session.
-	// When establishing a session, the client provides a username,
-	// This may or may not be authenticated, depending on the
-	// Server in use.
+	// User is the name of the user associated with the session.
+	// When establishing a session, the client provides a username, This
+	// may or may not be authenticated, depending on the Server in use.
 	User string
 
-	// Access is the name of the file tree requested by a client
-	// when it establishes a session, in the "aname" field of its
-	// "Tattach" request. When the EnableVHost option is used, if
-	// a client does not specify one, this is set to the hostname
-	// the client used to connect to the server, for non-TLS
-	// connections, and the SNI provided by the client, for TLS
-	// connections.
+	// Access is the name of the file tree requested by a client when
+	// it establishes a session, in the "aname" field of its "Tattach"
+	// request. When the EnableVHost option is used, if a client does
+	// not specify one, this is set to the hostname the client used
+	// to connect to the server, for non-TLS connections, and the SNI
+	// provided by the client, for TLS connections.
 	Access string
 
-	// Incoming requests from the client will be sent over the
-	// requests channel. When a new request is received, the
-	// previous request is no longer valid. The requests channel
-	// is closed when a session is over.
+	// Incoming requests from the client will be sent over the requests
+	// channel. When a new request is received, the previous request is
+	// no longer valid. The requests channel is closed when a session
+	// is ended.
 	requests chan Request
 
-	// This is the last request processed. It must be cleaned up
-	// with each call to Next().
+	// This is the most recent request processed. It must be cleaned
+	// up with each call to Next().
 	req Request
 
-	// To enable "middleware" like net/http allows, while still
-	// providing the Serve9P API that ties a session lifetime
-	// to the lifetime of a single function call, we must be able
-	// to pass a request along the line and wait for any downstream
-	// handlers to finish processing it. This channel coordinates that.
+	// To enable "middleware" like net/http allows, while still providing
+	// the Serve9P API that ties a session lifetime to the lifetime
+	// of a single function call, we must be able to pass a request
+	// along the line and wait for any downstream handlers to finish
+	// processing it. This channel coordinates that.
 	pipeline chan Request
 
 	// True when the current request is unanswered
 	unhandled bool
 
-	// Sends nil once auth is successful, err otherwise.
-	// Closed after authentication is complete, so can only
-	// be used once.
+	// Sends nil once auth is successful, err otherwise.  Closed after
+	// authentication is complete, so can only be used once.
 	authC chan error
 
 	// Underlying connection this session takes place on.
 	*conn
 
-	// This tracks the number of fids pointing to this session
-	// in conn.sessionFid. We need to know when all references
-	// are gone so we can properly close any session channels.
+	// This tracks the number of fids pointing to this session in
+	// conn.sessionFid. We need to know when all references are gone
+	// so we can properly close any session channels.
 	util.RefCount
 
 	// Open (or unopened) files, indexed by fid.
@@ -115,14 +112,14 @@ func (s *Session) fetchFile(fid uint32) (file, bool) {
 	return file{}, false
 }
 
-// Next retrieves the next Request for a 9P session. The next request
-// for the session can be accessed via the Request method if and only
-// if Next returns true. Any previous messages retrieved for the session
-// should not be modified or responded to after Next is called; if they have
-// not been answered, the styx package will send default responses for
-// them. The default response for a message can be found in the comments
-// for that type. Next returns false if the session has ended or there was an
-// error receiving the next Request.
+// Next waits for the next Request for a 9P session. The next request for
+// the session can be accessed via the Request method if and only if Next
+// returns true. Any previous messages retrieved for the session should not
+// be modified or responded to after Next is called; if they have not been
+// answered, the styx package will send default responses for them. The
+// default response for a message can be found in the comments for each
+// message type. Next returns false if the session has ended or there was
+// an error receiving the next Request.
 func (s *Session) Next() bool {
 	var ok bool
 	if s.conn.Flush() != nil {
@@ -146,16 +143,16 @@ func (s *Session) Next() bool {
 	return ok
 }
 
-// Request returns the last 9P message received by the Session. It is
-// only valid until the next call to Next.
+// Request returns the last 9P message received by the Session. It is only
+// valid until the next call to Next.
 func (s *Session) Request() Request {
 	return s.req
 }
 
-// When multiple Handlers are combined together using Stack, a handler
-// may modify the incoming request using the UpdateRequest method.
-// The current request will be overwritten with r, and reflected in calls
-// to the Request method in he current and all downstream handlers.
+// When multiple Handlers are combined together using Stack, a handler may
+// modify the incoming request using the UpdateRequest method.  The current
+// request will be overwritten with r, and reflected in calls to the Request
+// method in he current and all downstream handlers.
 func (s *Session) UpdateRequest(r Request) {
 	s.req = r
 }
@@ -163,9 +160,13 @@ func (s *Session) UpdateRequest(r Request) {
 func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file) bool {
 	newfid := msg.Newfid()
 
-	// Cannot use "opened" (ready for IO) fids for walking; see
-	// walk(5) in 9P manual.
-	file.rwc = nil
+	// Cannot use "opened" (ready for IO) fids for walking; see walk(5)
+	// in 9P manual. However, 9pfuse does this, so we'll allow it.
+	//if file.rwc != nil {
+	//	s.conn.Rerror(msg.Tag(), "walk on opened fid")
+	//	s.conn.Flush()
+	//	return true
+	//}
 
 	// newfid must be unused or equal to fid
 	if newfid != msg.Fid() {
@@ -178,7 +179,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	}
 
 	// NOTE(droyo) The clone usage of Twalk is hidden from the user
-	// of the "styx" library; we assume that all clients who have procured
+	// of the styx package; we assume that all clients who have procured
 	// a fid for a file are permitted to clone that fid, and may do so without
 	// side effects.
 	if msg.Nwname() == 0 {

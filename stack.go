@@ -1,12 +1,11 @@
 package styx
 
 // Stack combines multiple handlers into one. When a new message is received
-// from the client, it is passed to each handler, in order. Handlers may
-// use the Pass method of a Session to modify messages that will show up in
-// subsequent handlers. A message will continue to be passed to the next
-// handler in the chain until a response is sent. If no response is sent
-// by any handlers in the chain, the documented default response for that
-// message type will be sent.
+// from the client, it is passed to each handler, from left to right, until a
+// response is sent. If no response is sent.  by any handlers in the stack,
+// the documented default response for that message type will be sent to
+// the client. Handlers may use the UpdateRequest to pass information to
+// downstream handlers.
 func Stack(handlers ...Handler) Handler {
 	h := make([]Handler, len(handlers))
 	copy(h, handlers)
