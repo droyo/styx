@@ -72,12 +72,12 @@ func TestEchoServer(t *testing.T) {
 	defer ln.Close()
 
 	srv.Handler = HandlerFunc(func(s *Session) {
-		for msg := range s.requests {
+		for s.Next() {
+			msg := s.Request()
 			t.Logf("%T %s", msg, msg.Path())
 			switch msg := msg.(type) {
 			case Topen:
-				file, _ := os.Open(os.DevNull)
-				msg.Ropen(file, 0666)
+				msg.Ropen(os.Open(os.DevNull))
 			default:
 				msg.defaultResponse()
 			}

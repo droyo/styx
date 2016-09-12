@@ -237,7 +237,7 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 	}
 	s.requests <- Tcreate{
 		Name:    string(msg.Name()),
-		Perm:    styxfile.ModeOS(msg.Perm()),
+		Mode:    styxfile.ModeOS(msg.Perm()),
 		Flag:    openFlag(msg.Mode()),
 		reqInfo: newReqInfo(cx, s, msg, file.name),
 	}

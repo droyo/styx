@@ -1,6 +1,7 @@
 package styx
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -50,6 +51,7 @@ import (
 type walkElem struct {
 	index int
 	qid   styxproto.Qid // nil if not present
+	err   error
 }
 
 type walker struct {
@@ -90,6 +92,7 @@ func newWalker(s *Session, cx context.Context, msg styxproto.Twalk, base string,
 
 // runs in its own goroutine
 func (w *walker) run() {
+	var err error
 Loop:
 	for {
 		select {
@@ -98,6 +101,9 @@ Loop:
 		case el, ok := <-w.collect:
 			if !ok {
 				break Loop
+			}
+			if el.err != nil {
+				err = el.err
 			}
 			w.count++
 			w.qids[el.index] = el.qid
@@ -114,7 +120,11 @@ Loop:
 	close(w.complete)
 	w.session.conn.clearTag(w.tag)
 	if len(w.found) == 0 {
-		w.session.conn.Rerror(w.tag, "No such file or directory")
+		if err != nil {
+			w.session.conn.Rerror(w.tag, "%s", err)
+		} else {
+			w.session.conn.Rerror(w.tag, "No such file or directory")
+		}
 	} else {
 		w.session.files.Put(w.newfid, file{name: w.path})
 		w.session.conn.sessionFid.Put(w.newfid, w.session)
@@ -161,12 +171,19 @@ func (t Twalk) handled() bool {
 // Rwalk signals to the client that the file named by the Twalk's
 // Path method exists and is of the given mode. The permission bits of
 // mode are ignored, and only the file type bits, such as os.ModeDir,
-// are sent to the client.
-func (t Twalk) Rwalk(mode os.FileMode) {
-	qid := t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
+// are sent to the client. If err is non-nil, an error response is sent to the
+// client instead.
+func (t Twalk) Rwalk(info os.FileInfo, err error) {
+	var qid styxproto.Qid
+	var mode os.FileMode
+	if err == nil {
+		qid = t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
+		mode = info.Mode()
+	}
 	t.walk.filled[t.index] = 1
+	elem := walkElem{qid: qid, index: t.index, err: err}
 	select {
-	case t.walk.collect <- walkElem{qid: qid, index: t.index}:
+	case t.walk.collect <- elem:
 	case <-t.walk.complete:
 	}
 }
@@ -174,10 +191,7 @@ func (t Twalk) Rwalk(mode os.FileMode) {
 // Rerror signals to the client that the file named by the Twalk's
 // Path method does not exist.
 func (t Twalk) Rerror(format string, args ...interface{}) {
-	select {
-	case t.walk.collect <- walkElem{index: t.index}:
-	case <-t.walk.complete:
-	}
+	t.Rwalk(nil, fmt.Errorf(format, args...))
 }
 
 func (t Twalk) defaultResponse() {

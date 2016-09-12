@@ -27,11 +27,11 @@ func Example() {
 		for s.Next() {
 			switch t := s.Request().(type) {
 			case styx.Tstat:
-				t.Rstat(emptyDir{})
+				t.Rstat(emptyDir{}, nil)
 			case styx.Twalk:
-				t.Rwalk(os.ModeDir)
+				t.Rwalk(emptyDir{}, nil)
 			case styx.Topen:
-				t.Ropen(emptyDir{}, emptyDir{}.Mode())
+				t.Ropen(emptyDir{}, nil)
 			}
 		}
 	})

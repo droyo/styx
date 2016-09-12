@@ -134,12 +134,20 @@ func (t Topen) WithContext(ctx context.Context) Request {
 // If a file does not implement any of the Read or Write interfaces in
 // the io package, A generic error is returned to the client, and a message
 // will be written to the server's ErrorLog.
-func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
+func (t Topen) Ropen(rwc interface{}, err error) {
 	var (
 		file file
 		f    styxfile.Interface
-		err  error
 	)
+	if err != nil {
+		t.Rerror("%s", err)
+		return
+	}
+	// The type of the file (regular or directory) will have been
+	// established in a previous Twalk request.
+	qid := t.session.conn.qid(t.Path(), 0)
+	mode := styxfile.ModeOS(uint32(qid.Type()) << 24)
+
 	if dir, ok := rwc.(Directory); ok && mode.IsDir() {
 		f = styxfile.NewDir(dir, t.Path(), t.session.conn.qidpool)
 	} else {
@@ -157,8 +165,6 @@ func (t Topen) Ropen(rwc interface{}, mode os.FileMode) {
 	t.session.files.Update(t.fid, &file, func() {
 		file.rwc = f
 	})
-	qidtype := styxfile.QidType(styxfile.Mode9P(mode))
-	qid := t.session.conn.qid(t.Path(), qidtype)
 	t.session.unhandled = false
 	t.session.conn.clearTag(t.tag)
 	t.session.conn.Ropen(t.tag, qid, 0)
@@ -182,8 +188,13 @@ func (t Tstat) WithContext(ctx context.Context) Request {
 // Rstat responds to a succesful Tstat request. The styx package will
 // translate the os.FileInfo value into the appropriate 9P structure. Rstat
 // will attempt to resolve the names of the file's owner and group. If
-// that cannot be done, an empty string is sent.
-func (t Tstat) Rstat(info os.FileInfo) {
+// that cannot be done, an empty string is sent. If err is non-nil, and error
+// is sent to the client instead.
+func (t Tstat) Rstat(info os.FileInfo, err error) {
+	if err != nil {
+		t.Rerror("%s", err)
+		return
+	}
 	buf := make([]byte, styxproto.MaxStatLen)
 	uid, gid, muid := sys.FileOwner(info)
 	name := info.Name()
@@ -215,7 +226,7 @@ func (t Tstat) Rstat(info os.FileInfo) {
 // saying "permission denied".
 type Tcreate struct {
 	Name string      // name of the file to create
-	Perm os.FileMode // permissions and file type to create
+	Mode os.FileMode // permissions and file type to create
 	Flag int         // flags to open the new file with
 	reqInfo
 }
@@ -242,12 +253,16 @@ func (t Tcreate) Path() string {
 // and write requests to the file handle will pass through rwc. The value
 // rwc must meet the same criteria listed for the Ropen method of a Topen
 // request.
-func (t Tcreate) Rcreate(rwc interface{}) {
+func (t Tcreate) Rcreate(rwc interface{}, err error) {
 	var (
-		f   styxfile.Interface
-		err error
+		f styxfile.Interface
 	)
-	if dir, ok := rwc.(Directory); t.Perm.IsDir() && ok {
+	if err != nil {
+		t.Rerror("%s", err)
+		return
+	}
+
+	if dir, ok := rwc.(Directory); t.Mode.IsDir() && ok {
 		f = styxfile.NewDir(dir, path.Join(t.Path(), t.Name), t.session.conn.qidpool)
 	} else {
 		f, err = styxfile.New(rwc)
@@ -263,7 +278,7 @@ func (t Tcreate) Rcreate(rwc interface{}) {
 	// so there is no increase in references to this session.
 	t.session.files.Put(t.fid, file)
 
-	qtype := styxfile.QidType(styxfile.Mode9P(t.Perm))
+	qtype := styxfile.QidType(styxfile.Mode9P(t.Mode))
 	qid := t.session.conn.qid(file.name, qtype)
 	t.session.unhandled = false
 	t.session.conn.clearTag(t.tag)
