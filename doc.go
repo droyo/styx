@@ -4,8 +4,8 @@ Package styx serves network filesystems using the 9P2000 protocol.
 The styx package provides types and routines for implementing 9P
 servers. The files served may reflect real files on the host operating
 system, or an in-memory filesystem, or bi-directional RPC endpoints.
-Regardless, the protocol operations used to access these files are the
-same.
+Regardless, the protocol operations used to access these files are
+the same.
 
 The ListenAndServe and ListenAndServeTLS functions run 9P servers bound
 to a TCP port. To create a 9P server, define a type that implements the
@@ -47,7 +47,6 @@ method:
 		}
 	})
 	styx.ListenAndServe(":564", styx.Stack(sessionid, echo, handler))
-
 
 */
 package styx
