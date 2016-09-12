@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/internal/util"

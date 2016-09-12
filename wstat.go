@@ -9,7 +9,7 @@ import (
 
 	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/styxproto"
-	"golang.org/x/net/context"
+	"context"
 )
 
 // In the plan 9 manual, stat(5) has this to say about modifying

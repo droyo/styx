@@ -4,7 +4,7 @@ import (
 	"os"
 	"path"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/internal/sys"

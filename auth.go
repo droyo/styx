@@ -3,7 +3,7 @@ package styx
 import (
 	"io"
 
-	"golang.org/x/net/context"
+	"context"
 )
 
 // A Channel provides authentication methods with a bidirectional

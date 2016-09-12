@@ -13,7 +13,7 @@ import (
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 
-	"golang.org/x/net/context"
+	"context"
 )
 
 var (
