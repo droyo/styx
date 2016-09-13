@@ -138,10 +138,9 @@ func TestRflush(t *testing.T) {
 	})
 }
 
-// NOTE(droyo) this test fails, and is a known issue with the current
-// server; it remains blocked on handling each request and does not
-// process cancellations for the current request until the current request
-// is processed.
+// This test does not work because our testServer client is
+// in lock-step with the server; it only sends a request when
+// it receives a response to the previous request.
 func testCancel(t *testing.T) {
 	srv := testServer{test: t}
 	const timeout = time.Millisecond * 200
