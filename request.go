@@ -72,20 +72,20 @@ func (info reqInfo) defaultResponse() {
 }
 
 // Context returns the context associated with the request.
-func (info reqInfo) Context() context.Context {
-	return info.ctx
+func (t reqInfo) Context() context.Context {
+	return t.ctx
 }
 
 // Path returns the absolute path of the file being operated on.
-func (info reqInfo) Path() string {
-	return info.path
+func (t reqInfo) Path() string {
+	return t.path
 }
 
 // Rerror sends an error to the client.
-func (info reqInfo) Rerror(format string, args ...interface{}) {
-	info.session.unhandled = false
-	info.session.conn.clearTag(info.tag)
-	info.session.conn.Rerror(info.tag, format, args...)
+func (t reqInfo) Rerror(format string, args ...interface{}) {
+	t.session.unhandled = false
+	t.session.conn.clearTag(t.tag)
+	t.session.conn.Rerror(t.tag, format, args...)
 }
 
 func newReqInfo(cx context.Context, s *Session, msg fcall, filepath string) reqInfo {

@@ -46,7 +46,7 @@ method:
 			s.UpdateRequest(msg.WithContext(ctx))
 		}
 	})
-	styx.ListenAndServe(":564", styx.Stack(sessionid, echo, handler))
+	styx.ListenAndServe(":564", styx.Stack(sessionid, echo, fs))
 
 */
 package styx

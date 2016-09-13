@@ -7,9 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"context"
+
 	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/styxproto"
-	"context"
 )
 
 // In the plan 9 manual, stat(5) has this to say about modifying
@@ -22,7 +23,7 @@ import (
 // 	gral values.
 //
 // This keeps the protocol simpler by allowing a single message
-// to modify multiple file attributes. However, its shifts the burden to
+// to modify multiple file attributes. However, it shifts the burden to
 // the server to determine what fields are being modified and what
 // fields should be untouched. The styx package will attempt to hide
 // this complexity from the user, in a similar way to how it hides the

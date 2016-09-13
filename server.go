@@ -63,7 +63,7 @@ type Server struct {
 //
 // The Serve9P method is not required to answer every type of 9P message.
 // If an existing request is unanswered when Serve9P fetches the next
-// request, The styx package will reply to the client with a default
+// request, the styx package will reply to the client with a default
 // response. The documentation for each request type notes its default
 // response.
 //
