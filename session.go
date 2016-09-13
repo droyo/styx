@@ -122,9 +122,6 @@ func (s *Session) fetchFile(fid uint32) (file, bool) {
 // an error receiving the next Request.
 func (s *Session) Next() bool {
 	var ok bool
-	if s.conn.Flush() != nil {
-		return false
-	}
 	if s.req != nil {
 		if !s.req.handled() {
 			if s.pipeline != nil { // this is a nested handler
@@ -135,6 +132,9 @@ func (s *Session) Next() bool {
 		} else if s.pipeline != nil {
 			s.pipeline <- nil
 		}
+	}
+	if s.conn.Flush() != nil {
+		return false
 	}
 	s.req, ok = <-s.requests
 	if ok {
