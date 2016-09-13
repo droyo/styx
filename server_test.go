@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"aqwari.net/net/styx/internal/netutil"
 	"aqwari.net/net/styx/styxproto"
@@ -17,12 +18,10 @@ func (t testLogger) Printf(format string, args ...interface{}) {
 	t.Logf(format, args...)
 }
 
-type callback func(styxproto.Msg)
-
 type testServer struct {
-	send, recv callback
-	handler    Handler
-	test       *testing.T
+	callback func(req, rsp styxproto.Msg)
+	handler  Handler
+	test     *testing.T
 }
 
 func openfile(filename string) (*os.File, func()) {
@@ -37,11 +36,8 @@ func (s testServer) run(input io.Reader) {
 	var ln netutil.PipeListener
 	defer ln.Close()
 
-	if s.send == nil {
-		s.send = func(styxproto.Msg) {}
-	}
-	if s.recv == nil {
-		s.recv = func(styxproto.Msg) {}
+	if s.callback == nil {
+		s.callback = func(req, rsp styxproto.Msg) {}
 	}
 	srv := Server{
 		Handler:  s.handler,
@@ -53,14 +49,13 @@ func (s testServer) run(input io.Reader) {
 	in := styxproto.NewDecoder(input)
 	out := styxproto.NewDecoder(conn)
 
-	step := make(chan struct{})
+	step := make(chan styxproto.Msg)
 	go func() {
 		for out.Next() {
 			s.test.Logf("← %03d %s", out.Msg().Tag(), out.Msg())
-			s.recv(out.Msg())
-			step <- struct{}{}
+			step <- out.Msg()
 		}
-		if err := out.Err(); err != nil {
+		if err := out.Err(); err != nil && err != io.ErrClosedPipe {
 			s.test.Error(err)
 		} else {
 			s.test.Log("server closed connection")
@@ -74,19 +69,25 @@ func (s testServer) run(input io.Reader) {
 
 Loop:
 	for in.Next() {
-		s.test.Logf("→ %03d %s", in.Msg().Tag(), in.Msg())
+		req := in.Msg()
+		s.test.Logf("→ %03d %s", req.Tag(), req)
 		if _, err := styxproto.Write(conn, in.Msg()); err != nil {
 			break Loop
 		}
-		s.send(in.Msg())
-		if _, ok := <-step; !ok {
+		if rsp, ok := <-step; !ok {
 			break Loop
+		} else {
+			if rsp.Tag() != req.Tag() {
+				s.test.Error("tag %d != %d", rsp.Tag(), req.Tag())
+			}
+			s.callback(req, rsp)
 		}
 	}
 	conn.Close()
 	if err := out.Err(); err != nil {
 		s.test.Error(err)
 	}
+	<-step
 }
 
 func (s testServer) runMsg(fn func(*styxproto.Encoder)) {
@@ -94,7 +95,9 @@ func (s testServer) runMsg(fn func(*styxproto.Encoder)) {
 	e := styxproto.NewEncoder(wr)
 	go func() {
 		e.Tversion(styxproto.DefaultMaxSize, "9P2000")
+		e.Tattach(0, 0, styxproto.NoFid, "", "")
 		fn(e)
+		e.Tclunk(0, 0)
 		e.Flush()
 		wr.Close()
 	}()
@@ -107,7 +110,61 @@ func (s testServer) runFile(inputfile string) {
 	s.run(file)
 }
 
-func TestBasic(t *testing.T) {
+func TestSample(t *testing.T) {
 	s := testServer{test: t}
 	s.runFile("styxproto/testdata/sample.client.9p")
+}
+
+// The only valid response to a Tflush request is an
+// Rflush request, regardless of its success.
+func TestRflush(t *testing.T) {
+	s := testServer{test: t}
+	s.callback = func(req, rsp styxproto.Msg) {
+		switch req.(type) {
+		case styxproto.Tflush:
+			if _, ok := rsp.(styxproto.Rflush); !ok {
+				t.Error("got %T response to %T", rsp, req)
+			}
+		}
+	}
+	s.runMsg(func(enc *styxproto.Encoder) {
+		enc.Twalk(1, 0, 1)
+		enc.Tflush(2, 1)
+		enc.Tflush(3, 2)
+		enc.Tflush(2, 1)
+		enc.Tflush(2, 2)
+		enc.Tflush(1, 300)
+		enc.Tclunk(1, 1)
+	})
+}
+
+// NOTE(droyo) this test fails, and is a known issue with the current
+// server; it remains blocked on handling each request and does not
+// process cancellations for the current request until the current request
+// is processed.
+func testCancel(t *testing.T) {
+	srv := testServer{test: t}
+	const timeout = time.Millisecond * 200
+	srv.handler = HandlerFunc(func(s *Session) {
+		for s.Next() {
+			switch req := s.Request().(type) {
+			case Tstat:
+				select {
+				case <-time.After(timeout):
+					t.Errorf("Tstat not cancelled within %s",
+						timeout)
+				case <-req.Context().Done():
+					t.Logf("request cancelled")
+					req.Rerror("cancelled")
+				}
+			}
+		}
+	})
+
+	srv.runMsg(func(enc *styxproto.Encoder) {
+		enc.Twalk(1, 0, 1)
+		enc.Tstat(1, 1)
+		enc.Tflush(2, 1)
+		enc.Tclunk(1, 1)
+	})
 }
