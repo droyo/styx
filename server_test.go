@@ -1,8 +1,11 @@
 package styx
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +22,7 @@ func (t testLogger) Printf(format string, args ...interface{}) {
 }
 
 type testServer struct {
-	callback func(req, rsp styxproto.Msg)
+	callback func(req, rsp string)
 	handler  Handler
 	test     *testing.T
 }
@@ -33,11 +36,20 @@ func openfile(filename string) (*os.File, func()) {
 }
 
 func (s testServer) run(input io.Reader) {
+	// NOTE(droyo): Because the styxproto package re-uses the space
+	// storing a styxproto.Msg with each call to Next, we need to copy
+	// a message to pair it with a response. Rather than implementing
+	// a message copy, we just keep a string description.
+	type msg struct {
+		s   string
+		tag uint16
+	}
+
 	var ln netutil.PipeListener
 	defer ln.Close()
 
 	if s.callback == nil {
-		s.callback = func(req, rsp styxproto.Msg) {}
+		s.callback = func(string, string) {}
 	}
 	srv := Server{
 		Handler:  s.handler,
@@ -49,17 +61,23 @@ func (s testServer) run(input io.Reader) {
 	in := styxproto.NewDecoder(input)
 	out := styxproto.NewDecoder(conn)
 
-	step := make(chan styxproto.Msg)
+	step := make(chan msg)
 	go func() {
+		var wg sync.WaitGroup
 		for out.Next() {
-			s.test.Logf("← %03d %s", out.Msg().Tag(), out.Msg())
-			step <- out.Msg()
+			s.test.Logf("\t← %03d %s", out.Msg().Tag(), out.Msg())
+			wg.Add(1)
+			go func(tag uint16, s string) {
+				step <- msg{tag: tag, s: s}
+				wg.Done()
+			}(out.Msg().Tag(), fmt.Sprintf("%s", out.Msg()))
 		}
 		if err := out.Err(); err != nil && err != io.ErrClosedPipe {
 			s.test.Error(err)
 		} else {
 			s.test.Log("server closed connection")
 		}
+		wg.Wait()
 		close(step)
 
 		// Force client to stop writing when server is
@@ -67,21 +85,25 @@ func (s testServer) run(input io.Reader) {
 		conn.Close()
 	}()
 
+	pending := make(map[uint16]string)
 Loop:
 	for in.Next() {
 		req := in.Msg()
-		s.test.Logf("→ %03d %s", req.Tag(), req)
+		if _, ok := pending[req.Tag()]; ok {
+			rsp, ok := <-step
+			if !ok {
+				break Loop
+			}
+			if r, ok := pending[rsp.tag]; ok {
+				s.callback(r, rsp.s)
+				delete(pending, rsp.tag)
+			}
+		}
 		if _, err := styxproto.Write(conn, in.Msg()); err != nil {
 			break Loop
 		}
-		if rsp, ok := <-step; !ok {
-			break Loop
-		} else {
-			if rsp.Tag() != req.Tag() {
-				s.test.Error("tag %d != %d", rsp.Tag(), req.Tag())
-			}
-			s.callback(req, rsp)
-		}
+		s.test.Logf("\t→ %03d %s", req.Tag(), req)
+		pending[req.Tag()] = fmt.Sprintf("%s", req)
 	}
 	conn.Close()
 	if err := out.Err(); err != nil {
@@ -119,11 +141,10 @@ func TestSample(t *testing.T) {
 // Rflush request, regardless of its success.
 func TestRflush(t *testing.T) {
 	s := testServer{test: t}
-	s.callback = func(req, rsp styxproto.Msg) {
-		switch req.(type) {
-		case styxproto.Tflush:
-			if _, ok := rsp.(styxproto.Rflush); !ok {
-				t.Error("got %T response to %T", rsp, req)
+	s.callback = func(req, rsp string) {
+		if strings.Contains(req, "Tflush") {
+			if !strings.Contains(rsp, "Rflush") {
+				t.Error("got %s response to %s", rsp, req)
 			}
 		}
 	}
@@ -141,7 +162,7 @@ func TestRflush(t *testing.T) {
 // This test does not work because our testServer client is
 // in lock-step with the server; it only sends a request when
 // it receives a response to the previous request.
-func testCancel(t *testing.T) {
+func TestCancel(t *testing.T) {
 	srv := testServer{test: t}
 	const timeout = time.Millisecond * 200
 	srv.handler = HandlerFunc(func(s *Session) {
