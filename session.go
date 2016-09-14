@@ -284,6 +284,8 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 }
 
 func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file) bool {
+	var n int
+	var err error
 	if file.rwc == nil {
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %s is not open for reading", file.name)
@@ -291,26 +293,46 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 		return false
 	}
 
-	// TODO(droyo) allocations could hurt here, come up with a better
-	// way to do this (after measuring the impact, of course). The tricky bit
-	// here is inherent to the 9P protocol; rather than using sentinel values,
-	// each message is prefixed with its length. While this is generally a Good
-	// Thing, this means we can't write directly to the connection, because
-	// we don't know how much we are going to write until it's too late.
-	buf := make([]byte, int(msg.Count()))
+	go func() {
+		// TODO(droyo) allocations could hurt here, come up with a better
+		// way to do this (after measuring the impact, of course). The tricky bit
+		// here is inherent to the 9P protocol; rather than using sentinel values,
+		// each message is prefixed with its length. While this is generally a Good
+		// Thing, this means we can't write directly to the connection, because
+		// we don't know how much we are going to write until it's too late.
+		buf := make([]byte, int(msg.Count()))
 
-	// TODO(droyo) cancellation
-	n, err := file.rwc.ReadAt(buf, msg.Offset())
+		if t, ok := cx.Deadline(); ok {
+			styxfile.SetDeadline(file.rwc, t)
+		}
+		done := make(chan struct{})
+		go func() {
+			n, err = file.rwc.ReadAt(buf, msg.Offset())
+			close(done)
+		}()
+		select {
+		case <-cx.Done():
+			// NOTE(droyo) deciding what to do here is somewhat
+			// difficult. Many (but not all) Read/Write calls in Go can
+			// be interrupted by calling Close. Obviously, calling Close
+			// on a file will disrupt any current and future reads on the
+			// same fid. However, that is preferrable to leaking goroutines.
+			file.rwc.Close()
+			s.conn.clearTag(msg.Tag())
+			return
+		case <-done:
+		}
 
-	s.conn.clearTag(msg.Tag())
-	if n > 0 {
-		s.conn.Rread(msg.Tag(), buf[:n])
-	} else if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		s.conn.Rerror(msg.Tag(), "%v", err)
-	} else {
-		s.conn.Rread(msg.Tag(), buf[:n])
-	}
-	s.conn.Flush()
+		s.conn.clearTag(msg.Tag())
+		if n > 0 {
+			s.conn.Rread(msg.Tag(), buf[:n])
+		} else if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			s.conn.Rerror(msg.Tag(), "%v", err)
+		} else {
+			s.conn.Rread(msg.Tag(), buf[:n])
+		}
+		s.conn.Flush()
+	}()
 	return true
 }
 
@@ -322,7 +344,7 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 		return false
 	}
 
-	// TODO(droyo): handle cancellation
+	// BUG(droyo): cancellation of write requests is not yet implemented.
 	w := util.NewSectionWriter(file.rwc, msg.Offset(), msg.Count())
 	n, err := io.Copy(w, msg)
 	s.conn.clearTag(msg.Tag())

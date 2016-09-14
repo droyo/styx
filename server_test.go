@@ -1,9 +1,11 @@
 package styx
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"testing"
@@ -159,9 +161,6 @@ func TestRflush(t *testing.T) {
 	})
 }
 
-// This test does not work because our testServer client is
-// in lock-step with the server; it only sends a request when
-// it receives a response to the previous request.
 func TestCancel(t *testing.T) {
 	srv := testServer{test: t}
 	const timeout = time.Millisecond * 200
@@ -187,4 +186,76 @@ func TestCancel(t *testing.T) {
 		enc.Tflush(2, 1)
 		enc.Tclunk(1, 1)
 	})
+}
+
+type slowFile struct {
+	blockme chan struct{}
+	closeme chan struct{}
+	name    string
+}
+
+func (f slowFile) Read(p []byte) (int, error) {
+	select {
+	case <-f.blockme:
+		return len(p), nil
+	case <-f.closeme:
+		return 0, errors.New("closed")
+	}
+}
+
+// os.FileInfo
+func (f slowFile) Mode() os.FileMode  { return 0 }
+func (f slowFile) IsDir() bool        { return false }
+func (f slowFile) Name() string       { return f.name }
+func (f slowFile) Sys() interface{}   { return nil }
+func (f slowFile) Size() int64        { return 100000 }
+func (f slowFile) ModTime() time.Time { return time.Now() }
+func (f slowFile) Close() error {
+	select {
+	case <-f.closeme:
+		break
+	default:
+		// NOTE(droyo) yes I know this is a race
+		close(f.closeme)
+	}
+	return nil
+}
+
+func TestCancelRead(t *testing.T) {
+	srv := testServer{test: t}
+	const timeout = time.Millisecond * 200
+	closeme := make(chan struct{})
+	srv.handler = HandlerFunc(func(s *Session) {
+		for s.Next() {
+			switch req := s.Request().(type) {
+			case Twalk:
+				req.Rwalk(slowFile{}, nil)
+			case Topen:
+				// blockme is nil, will block reads forever
+				req.Ropen(slowFile{
+					name:    path.Base(req.Path()),
+					closeme: closeme,
+				}, nil)
+			}
+		}
+	})
+
+	done := make(chan struct{})
+	go func() {
+		srv.runMsg(func(enc *styxproto.Encoder) {
+			enc.Twalk(1, 0, 1, "somefile")
+			enc.Topen(1, 1, styxproto.OREAD)
+			enc.Tread(1, 1, 0, 500)
+			enc.Tflush(2, 1)
+			enc.Tclunk(1, 1)
+		})
+		close(done)
+	}()
+	select {
+	case <-closeme:
+		t.Logf("cancelled read")
+		<-done
+	case <-time.After(time.Millisecond * 200):
+		t.Error("cancel read failed")
+	}
 }

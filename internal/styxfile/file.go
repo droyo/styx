@@ -69,6 +69,28 @@ func New(rwc interface{}) (Interface, error) {
 	return nil, fmt.Errorf("Cannot convert type %T into a styxfile.Interface")
 }
 
+// SetDeadline sets read/write deadlines for a file, if the type supports it.
+func SetDeadline(file Interface, t time.Time) error {
+	var real interface{}
+	switch v := file.(type) {
+	case *seekerAt:
+		real = v.rwc
+	case *dumbPipe:
+		real = v.rwc
+	case *dirReader:
+		real = v.Directory
+	default:
+		real = v
+	}
+	type deadline interface {
+		SetDeadline(time.Time) error
+	}
+	if v, ok := real.(deadline); ok {
+		return v.SetDeadline(t)
+	}
+	return ErrNotSupported
+}
+
 // Stat produces a styxproto.Stat from an open file. If the value
 // provides a Stat method matching that of os.File, that is used.
 // Otherwise, the styxfile package determines the file's attributes
