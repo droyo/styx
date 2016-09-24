@@ -60,9 +60,9 @@ func (t twstat) handled() bool {
 }
 
 func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
-	// mode, atime+mtime, length, name, uid+gid
+	// mode, atime+mtime, length, name, uid+gid, sync
 	// we will ignore muid
-	const numMutable = 5
+	const numMutable = 6
 
 	// By convention, sending a Twstat message with a stat structure consisting
 	// entirely of "don't touch" values indicates that the client wants the server
@@ -139,7 +139,7 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 			success bool
 			err     error
 		)
-		for messages > 0 {
+		for i := 0; i < messages; i++ {
 			if e, ok := <-status; !ok {
 				panic("closed Twstat channel prematurely")
 			} else if e != nil {
@@ -160,10 +160,6 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 	}()
 
 	return true
-}
-
-func (t twstat) defaultResponse() {
-	t.Rerror("permission denied")
 }
 
 // A Trename message is sent by the client to change the name of
