@@ -195,7 +195,7 @@ func (c *conn) serve() {
 
 func (c *conn) handleMessage(m styxproto.Msg) bool {
 	if _, ok := c.pendingReq.Get(m.Tag()); ok {
-		c.Rerror(m.Tag(), "%s", errTagInUse)
+		c.srv.logf("fatal: client re-used existing tag %d", m.Tag())
 		return false
 	}
 	cx, cancel := context.WithCancel(c.cx)
