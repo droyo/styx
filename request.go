@@ -84,8 +84,9 @@ func (t reqInfo) Path() string {
 // Rerror sends an error to the client.
 func (t reqInfo) Rerror(format string, args ...interface{}) {
 	t.session.unhandled = false
-	t.session.conn.clearTag(t.tag)
-	t.session.conn.Rerror(t.tag, format, args...)
+	if t.session.conn.clearTag(t.tag) {
+		t.session.conn.Rerror(t.tag, format, args...)
+	}
 }
 
 func newReqInfo(cx context.Context, s *Session, msg fcall, filepath string) reqInfo {
@@ -166,8 +167,9 @@ func (t Topen) Ropen(rwc interface{}, err error) {
 		file.rwc = f
 	})
 	t.session.unhandled = false
-	t.session.conn.clearTag(t.tag)
-	t.session.conn.Ropen(t.tag, qid, 0)
+	if t.session.conn.clearTag(t.tag) {
+		t.session.conn.Ropen(t.tag, qid, 0)
+	}
 }
 
 // A Tstat message is sent when a client wants metadata about a file.
@@ -213,8 +215,9 @@ func (t Tstat) Rstat(info os.FileInfo, err error) {
 	stat.SetMtime(uint32(info.ModTime().Unix()))
 	stat.SetQid(t.session.conn.qid(t.Path(), styxfile.QidType(mode)))
 	t.session.unhandled = false
-	t.session.conn.clearTag(t.tag)
-	t.session.conn.Rstat(t.tag, stat)
+	if t.session.conn.clearTag(t.tag) {
+		t.session.conn.Rstat(t.tag, stat)
+	}
 }
 
 // A Tcreate message is sent when a client wants to create a new file
@@ -281,8 +284,9 @@ func (t Tcreate) Rcreate(rwc interface{}, err error) {
 	qtype := styxfile.QidType(styxfile.Mode9P(t.Mode))
 	qid := t.session.conn.qid(file.name, qtype)
 	t.session.unhandled = false
-	t.session.conn.clearTag(t.tag)
-	t.session.conn.Rcreate(t.tag, qid, 0)
+	if t.session.conn.clearTag(t.tag) {
+		t.session.conn.Rcreate(t.tag, qid, 0)
+	}
 }
 
 // A Tremove message is sent when a client wants to delete a file
@@ -314,7 +318,10 @@ func (t Tremove) Rremove(err error) {
 	t.session.files.Del(t.fid)
 
 	t.session.unhandled = false
-	t.session.conn.clearTag(t.tag)
+	if !t.session.conn.clearTag(t.tag) {
+		// cancelled, do not send response
+		return
+	}
 
 	// NOTE(droyo): This is not entirely correct; if the server wants
 	// to implement unix-like semantics (the file hangs around as

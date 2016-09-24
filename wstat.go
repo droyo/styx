@@ -148,7 +148,9 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 				success = true
 			}
 		}
-		s.conn.clearTag(msg.Tag())
+		if !s.conn.clearTag(msg.Tag()) {
+			return
+		}
 		if success {
 			s.conn.Rwstat(msg.Tag())
 		} else {

@@ -118,7 +118,9 @@ Loop:
 		}
 	}
 	close(w.complete)
-	w.session.conn.clearTag(w.tag)
+	if !w.session.conn.clearTag(w.tag) {
+		return
+	}
 	if len(w.found) == 0 {
 		if err != nil {
 			w.session.conn.Rerror(w.tag, "%s", err)

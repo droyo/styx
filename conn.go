@@ -162,13 +162,16 @@ func (c *conn) qid(name string, qtype uint8) styxproto.Qid {
 }
 
 // All request contexts must have their cancel functions
-// called, to free up resources in the context.
-func (c *conn) clearTag(tag uint16) {
+// called, to free up resources in the context. Returns false
+// if the tag is already cancelled
+func (c *conn) clearTag(tag uint16) bool {
 	var cancel context.CancelFunc
 	if c.pendingReq.Fetch(tag, &cancel) {
 		cancel()
 		c.pendingReq.Del(tag)
+		return true
 	}
+	return false
 }
 
 // runs in its own goroutine, one per connection.
@@ -347,9 +350,10 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 
 func (c *conn) handleTflush(cx context.Context, m styxproto.Tflush) bool {
 	c.clearTag(m.Oldtag())
-	c.clearTag(m.Tag())
 
-	c.Rflush(m.Tag())
+	if c.clearTag(m.Tag()) {
+		c.Rflush(m.Tag())
+	}
 	c.Flush()
 	return true
 }
