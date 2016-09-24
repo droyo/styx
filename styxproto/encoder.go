@@ -436,12 +436,12 @@ func (enc *Encoder) Twstat(tag uint16, fid uint32, stat Stat) {
 	if len(stat) < minStatLen {
 		panic(errShortStat)
 	}
-	size := uint32(minSizeLUT[msgTwstat] + len(stat))
+	size := uint32(minSizeLUT[msgTwstat] + 2 + len(stat))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
 
-	pheader(enc.w, size, msgTwstat, tag)
+	pheader(enc.w, size, msgTwstat, tag, fid)
 	pbyte(enc.w, stat)
 }
 
