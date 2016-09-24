@@ -174,7 +174,7 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 			s.conn.clearTag(msg.Tag())
 			s.conn.Rerror(msg.Tag(), "Twalk: fid %x already in use", newfid)
 			s.conn.Flush()
-			return false
+			return true
 		}
 	}
 
@@ -233,7 +233,7 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "not a directory: %q", file.name)
 		s.conn.Flush()
-		return false
+		return true
 	}
 	s.requests <- Tcreate{
 		Name:    string(msg.Name()),
@@ -290,7 +290,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %s is not open for reading", file.name)
 		s.conn.Flush()
-		return false
+		return true
 	}
 
 	go func() {
@@ -341,7 +341,7 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %q is not opened for writing", file.name)
 		s.conn.Flush()
-		return false
+		return true
 	}
 
 	// BUG(droyo): cancellation of write requests is not yet implemented.

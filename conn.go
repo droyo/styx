@@ -216,7 +216,7 @@ func (c *conn) handleMessage(m styxproto.Msg) bool {
 	default:
 		c.Rerror(m.Tag(), "unexpected %T message", m)
 		c.Flush()
-		return false
+		return true
 	}
 	return true
 }
@@ -274,7 +274,7 @@ func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
 	if _, ok := c.sessionFid.Get(m.Afid()); ok {
 		c.clearTag(m.Tag())
 		c.Rerror(m.Tag(), "fid %x in use", m.Afid())
-		return false
+		return true
 	}
 	client, server := net.Pipe()
 	ch := &Channel{
@@ -318,19 +318,19 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 		if !c.sessionFid.Fetch(s, m.Afid()) {
 			c.clearTag(m.Tag())
 			c.Rerror(m.Tag(), "invalid afid %x", m.Afid())
-			return false
+			return true
 		}
 		// From attach(5): The same validated afid may be used for
 		// multiple attach messages with the same uname and aname.
 		if s.User != string(m.Uname()) || s.Access != string(m.Aname()) {
 			c.clearTag(m.Tag())
 			c.Rerror(m.Tag(), "afid mismatch for %s on %s", m.Uname(), m.Aname())
-			return false
+			return true
 		}
 		if err := <-s.authC; err != nil {
 			c.clearTag(m.Tag())
 			c.Rerror(m.Tag(), "auth failed: %s", err)
-			return false
+			return true
 		}
 	}
 	go func() {
@@ -359,13 +359,12 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 	if !ok {
 		c.Rerror(msg.Tag(), "%s", errNoFid)
 		c.Flush()
-		return false
+		return true
 	}
 
 	file, ok := s.fetchFile(msg.Fid())
 	if !ok {
 		panic("bug: fid in session map, but no file associated")
-		return false
 	}
 
 	// NOTE(droyo) on security and anonymous users: On a server with
@@ -385,7 +384,7 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 			c.clearTag(msg.Tag())
 			c.Rerror(msg.Tag(), "%T not allowed on afid", msg)
 			c.Flush()
-			return false
+			return true
 		}
 	}
 
