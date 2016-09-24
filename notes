@@ -186,3 +186,14 @@ Use of pendingReq to check if a request has been handled is racy,
 because a new request with the same tag may arrive between the
 time the tag was released and the Serve9P method checks if the
 tag is gone.
+
+
+REMAINING WORK
+
+· Tests, examples for authentication
+· Move jsonfs into this repo, perhaps under an examples dir
+· Tests for Twalk
+· Review use of context.Context
+· Make context.Context values private
+· Reconsider Channel type in favor of io.ReadWriteCloser + AuthConn function or something
+· A few benchmarks
