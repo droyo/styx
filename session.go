@@ -373,6 +373,7 @@ func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file fi
 	} else {
 		s.conn.Rclunk(msg.Tag())
 	}
+	s.conn.Flush()
 	if !s.DecRef() {
 		s.endSession()
 	}

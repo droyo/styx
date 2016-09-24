@@ -361,6 +361,7 @@ func (c *conn) handleTflush(cx context.Context, m styxproto.Tflush) bool {
 func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 	s, ok := c.sessionByFid(msg.Fid())
 	if !ok {
+		c.clearTag(msg.Tag())
 		c.Rerror(msg.Tag(), "%s", errNoFid)
 		c.Flush()
 		return true
