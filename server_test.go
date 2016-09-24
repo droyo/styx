@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,11 @@ import (
 
 	"aqwari.net/net/styx/internal/netutil"
 	"aqwari.net/net/styx/styxproto"
+)
+
+const (
+	maxuint32 = 1<<32 - 1
+	maxuint16 = 1<<16 - 1
 )
 
 type testLogger struct {
@@ -24,7 +30,7 @@ func (t testLogger) Printf(format string, args ...interface{}) {
 }
 
 type testServer struct {
-	callback func(req, rsp string)
+	callback func(req, rsp styxproto.Msg)
 	handler  Handler
 	test     *testing.T
 }
@@ -37,81 +43,177 @@ func openfile(filename string) (*os.File, func()) {
 	return file, func() { file.Close() }
 }
 
-func (s testServer) run(input io.Reader) {
-	// NOTE(droyo): Because the styxproto package re-uses the space
-	// storing a styxproto.Msg with each call to Next, we need to copy
-	// a message to pair it with a response. Rather than implementing
-	// a message copy, we just keep a string description.
-	type msg struct {
-		s   string
-		tag uint16
-	}
+type slowFile struct {
+	blockme chan struct{}
+	closeme chan struct{}
+	mu      sync.Mutex
+	name    string
+}
 
+func (f slowFile) Read(p []byte) (int, error) {
+	select {
+	case <-f.blockme:
+		return len(p), nil
+	case <-f.closeme:
+		return 0, errors.New("closed")
+	}
+}
+
+// os.FileInfo
+func (f slowFile) Mode() os.FileMode  { return 0 }
+func (f slowFile) IsDir() bool        { return false }
+func (f slowFile) Name() string       { return f.name }
+func (f slowFile) Sys() interface{}   { return nil }
+func (f slowFile) Size() int64        { return 100000 }
+func (f slowFile) ModTime() time.Time { return time.Now() }
+func (f slowFile) Close() error {
+	f.mu.Lock()
+	select {
+	case <-f.closeme:
+	default:
+		close(f.closeme)
+	}
+	f.mu.Unlock()
+	return nil
+}
+
+func chanServer(t *testing.T, handler Handler) (in, out chan styxproto.Msg) {
 	var ln netutil.PipeListener
-	defer ln.Close()
-
-	if s.callback == nil {
-		s.callback = func(string, string) {}
-	}
+	// last for one session
 	srv := Server{
-		Handler:  s.handler,
-		ErrorLog: testLogger{s.test},
+		Handler:  handler,
+		ErrorLog: testLogger{t},
 	}
 	go srv.Serve(&ln)
+	conn, err := ln.Dial()
+	if err != nil {
+		panic(err)
+	}
 
-	conn, _ := ln.Dial()
-	in := styxproto.NewDecoder(input)
-	out := styxproto.NewDecoder(conn)
+	// NOTE(droyo) by buffering the channel we allow the server to take
+	// in multiple requests without being blocked on sending their responses.
+	// This is a compromise between keeping the messages in order and having
+	// an infinite buffer depth (such as with goroutine per channel). Good enough
+	// for testing.
+	out = make(chan styxproto.Msg, 1000)
+	in = make(chan styxproto.Msg)
 
-	step := make(chan msg)
 	go func() {
-		var wg sync.WaitGroup
-		for out.Next() {
-			s.test.Logf("\t← %03d %s", out.Msg().Tag(), out.Msg())
-			wg.Add(1)
-			go func(tag uint16, s string) {
-				step <- msg{tag: tag, s: s}
-				wg.Done()
-			}(out.Msg().Tag(), fmt.Sprintf("%s", out.Msg()))
+		for req := range in {
+			if _, err := styxproto.Write(conn, req); err != nil {
+				t.Error(err)
+				break
+			}
 		}
-		if err := out.Err(); err != nil && err != io.ErrClosedPipe {
-			s.test.Error(err)
-		} else {
-			s.test.Log("server closed connection")
-		}
-		wg.Wait()
-		close(step)
-
-		// Force client to stop writing when server is
-		// done
 		conn.Close()
 	}()
+	go func() {
+		d := styxproto.NewDecoder(conn)
+		for d.Next() {
+			out <- copyMsg(d.Msg())
+		}
+		close(out)
+	}()
+	return in, out
+}
 
-	pending := make(map[uint16]string)
+func copyMsg(msg styxproto.Msg) styxproto.Msg {
+	var err error
+
+	rd, wr := io.Pipe()
+	d := styxproto.NewDecoder(rd)
+	go func() {
+		_, err = styxproto.Write(wr, msg)
+		wr.CloseWithError(err)
+	}()
+	for d.Next() {
+		return d.Msg()
+	}
+	panic(fmt.Errorf("failed to copy %T message: %s", msg, d.Err()))
+}
+
+func messagesFrom(t *testing.T, r io.Reader) chan styxproto.Msg {
+	c := make(chan styxproto.Msg)
+	input := styxproto.NewDecoder(r)
+	go func() {
+		for input.Next() {
+			if b, ok := input.Msg().(styxproto.BadMessage); ok {
+				t.Logf("skipping bad message: %s", b.Err)
+			} else {
+				c <- copyMsg(input.Msg())
+			}
+		}
+		if input.Err() != nil {
+			t.Error("error reading input: ", input.Err())
+		}
+		close(c)
+	}()
+	return c
+}
+
+func (s testServer) run(r io.Reader) {
+	if s.callback == nil {
+		s.callback = func(q, r styxproto.Msg) {}
+	}
+	pending := make(map[uint16]styxproto.Msg)
+	requests, responses := chanServer(s.test, s.handler)
+
 Loop:
-	for in.Next() {
-		req := in.Msg()
-		if _, ok := pending[req.Tag()]; ok {
-			rsp, ok := <-step
+	for msg := range messagesFrom(s.test, r) {
+		for _, ok := pending[msg.Tag()]; ok; _, ok = pending[msg.Tag()] {
+			rsp, ok := <-responses
 			if !ok {
 				break Loop
 			}
-			if r, ok := pending[rsp.tag]; ok {
-				s.callback(r, rsp.s)
-				delete(pending, rsp.tag)
+			s.test.Logf("\t← %03d %s", rsp.Tag(), rsp)
+			if req, ok := pending[rsp.Tag()]; ok {
+				s.callback(req, rsp)
+				delete(pending, rsp.Tag())
+				if flush, ok := req.(styxproto.Tflush); ok {
+					if _, ok := rsp.(styxproto.Rflush); ok {
+						delete(pending, flush.Oldtag())
+					}
+				}
+			} else {
+				s.test.Errorf("Got %T response for unknown tag %d",
+					rsp, rsp.Tag())
 			}
 		}
-		if _, err := styxproto.Write(conn, in.Msg()); err != nil {
-			break Loop
+		s.test.Logf("\t→ %03d %s", msg.Tag(), msg)
+		requests <- msg
+		pending[msg.Tag()] = msg
+	}
+Remaining:
+	for {
+		select {
+		case rsp, ok := <-responses:
+			if !ok {
+				break Remaining
+			}
+			s.test.Logf("\t← %03d %s", rsp.Tag(), rsp)
+			if req, ok := pending[rsp.Tag()]; ok {
+				s.callback(req, rsp)
+				delete(pending, req.Tag())
+			} else {
+				s.test.Errorf("got %T response for unused tag %d", rsp, rsp.Tag())
+			}
+			if len(pending) == 0 {
+				break Remaining
+			}
+		case <-time.After(time.Second * 5):
+			s.test.Error("timeout waiting for server response")
+			break Remaining
 		}
-		s.test.Logf("\t→ %03d %s", req.Tag(), req)
-		pending[req.Tag()] = fmt.Sprintf("%s", req)
 	}
-	conn.Close()
-	if err := out.Err(); err != nil {
-		s.test.Error(err)
+	close(requests)
+	if len(pending) > 0 {
+		reqs := make([]string, 0, len(pending))
+		for _, msg := range pending {
+			reqs = append(reqs, fmt.Sprintf("%03d %s", msg.Tag(), msg))
+		}
+		s.test.Errorf("the following requests were unanswered:\n%s",
+			strings.Join(reqs, "\n"))
 	}
-	<-step
 }
 
 func (s testServer) runMsg(fn func(*styxproto.Encoder)) {
@@ -121,7 +223,6 @@ func (s testServer) runMsg(fn func(*styxproto.Encoder)) {
 		e.Tversion(styxproto.DefaultMaxSize, "9P2000")
 		e.Tattach(0, 0, styxproto.NoFid, "", "")
 		fn(e)
-		e.Tclunk(0, 0)
 		e.Flush()
 		wr.Close()
 	}()
@@ -141,12 +242,14 @@ func TestSample(t *testing.T) {
 
 // The only valid response to a Tflush request is an
 // Rflush request, regardless of its success.
+// Note the tags used in this session; it tests that a server
+// does not send a response to a cancelled message.
 func TestRflush(t *testing.T) {
 	s := testServer{test: t}
-	s.callback = func(req, rsp string) {
-		if strings.Contains(req, "Tflush") {
-			if !strings.Contains(rsp, "Rflush") {
-				t.Error("got %s response to %s", rsp, req)
+	s.callback = func(req, rsp styxproto.Msg) {
+		if _, ok := req.(styxproto.Tflush); ok {
+			if _, ok := rsp.(styxproto.Rflush); !ok {
+				t.Errorf("got %T response to %T", rsp, req)
 			}
 		}
 	}
@@ -188,42 +291,9 @@ func TestCancel(t *testing.T) {
 	})
 }
 
-type slowFile struct {
-	blockme chan struct{}
-	closeme chan struct{}
-	name    string
-}
-
-func (f slowFile) Read(p []byte) (int, error) {
-	select {
-	case <-f.blockme:
-		return len(p), nil
-	case <-f.closeme:
-		return 0, errors.New("closed")
-	}
-}
-
-// os.FileInfo
-func (f slowFile) Mode() os.FileMode  { return 0 }
-func (f slowFile) IsDir() bool        { return false }
-func (f slowFile) Name() string       { return f.name }
-func (f slowFile) Sys() interface{}   { return nil }
-func (f slowFile) Size() int64        { return 100000 }
-func (f slowFile) ModTime() time.Time { return time.Now() }
-func (f slowFile) Close() error {
-	select {
-	case <-f.closeme:
-		break
-	default:
-		// NOTE(droyo) yes I know this is a race
-		close(f.closeme)
-	}
-	return nil
-}
-
 func TestCancelRead(t *testing.T) {
 	srv := testServer{test: t}
-	const timeout = time.Millisecond * 200
+	const timeout = time.Millisecond * 300
 	closeme := make(chan struct{})
 	srv.handler = HandlerFunc(func(s *Session) {
 		for s.Next() {
@@ -255,7 +325,97 @@ func TestCancelRead(t *testing.T) {
 	case <-closeme:
 		t.Logf("cancelled read")
 		<-done
-	case <-time.After(time.Millisecond * 200):
+	case <-time.After(timeout):
 		t.Error("cancel read failed")
+	}
+}
+
+func blankStat(name, uid, gid string) styxproto.Stat {
+	buf := make([]byte, styxproto.MaxStatLen)
+	stat, _, err := styxproto.NewStat(buf, name, uid, gid, uid)
+	if err != nil {
+		panic(err)
+	}
+
+	stat.SetAtime(maxuint32)
+	stat.SetMtime(maxuint32)
+	stat.SetDev(maxuint32)
+	stat.SetLength(-1)
+	stat.SetMode(maxuint32)
+	for i := range stat.Qid() {
+		stat.Qid()[i] = 0xff
+	}
+	stat.SetType(maxuint16)
+	return stat
+}
+
+func TestTwstat(t *testing.T) {
+	seen := make(map[string]struct{})
+	srv := testServer{test: t}
+	srv.handler = HandlerFunc(func(s *Session) {
+		for s.Next() {
+			switch req := s.Request().(type) {
+			case Trename:
+				seen["Trename"] = struct{}{}
+				req.Rrename(nil)
+			case Tchmod:
+				seen["Tchmod"] = struct{}{}
+				req.Rchmod(nil)
+			case Ttruncate:
+				req.Rtruncate(nil)
+				seen["Ttruncate"] = struct{}{}
+			case Tchown:
+				req.Rchown(nil)
+				seen["Tchown"] = struct{}{}
+			case Tutimes:
+				req.Rutimes(nil)
+				seen["Tutimes"] = struct{}{}
+			case Tsync:
+				req.Rsync(nil)
+				seen["Tsync"] = struct{}{}
+			}
+		}
+	})
+	srv.runMsg(func(enc *styxproto.Encoder) {
+		var (
+			statblank  = blankStat("", "", "")
+			statrename = blankStat("newname", "", "")
+			statchown  = blankStat("", "newuser", "newgroup")
+		)
+		enc.Twalk(1, 0, 1)
+		{
+			// Tutimes
+			statblank.SetAtime(uint32(time.Now().Unix()))
+			enc.Twstat(1, 1, statblank)
+			statblank.SetAtime(maxuint32)
+		}
+		{
+			// Tchmod
+			statblank.SetMode(0777)
+			enc.Twstat(1, 1, statblank)
+			statblank.SetMode(maxuint32)
+		}
+		{
+			// Ttruncate
+			statblank.SetLength(100)
+			enc.Twstat(1, 1, statblank)
+			statblank.SetLength(-1)
+		}
+		// Tsync
+		enc.Twstat(1, 1, statblank)
+
+		enc.Twstat(1, 1, statrename)
+		enc.Twstat(1, 1, statchown)
+	})
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	got := strings.Join(keys, ", ")
+	if len(seen) < 6 {
+		t.Error("twstat messages did not generate synthentic msg for each field, got", got)
+	} else {
+		t.Logf("effected %s requests via Twstat messages", got)
 	}
 }
