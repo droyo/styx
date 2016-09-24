@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"context"
 
@@ -38,6 +39,7 @@ type Session struct {
 	// no longer valid. The requests channel is closed when a session
 	// is ended.
 	requests chan Request
+	closeMu  sync.Mutex
 
 	// This is the most recent request processed. It must be cleaned
 	// up with each call to Next().
@@ -381,10 +383,16 @@ func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file fi
 // session. The handler is still running and we must notify
 // it.
 func (s *Session) endSession() {
-	if s.requests != nil {
+	s.closeMu.Lock()
+	select {
+	case _, ok := <-s.requests:
+		if ok {
+			close(s.requests)
+		}
+	default:
 		close(s.requests)
-		s.requests = nil
 	}
+	s.closeMu.Unlock()
 }
 
 // Called when Serve9P exits. Any in-flight requests

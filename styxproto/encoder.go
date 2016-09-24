@@ -28,6 +28,8 @@ func NewEncoder(w io.Writer) *Encoder {
 // Err returns the first error encountered by an Encoder
 // when writing data to its underlying io.Writer.
 func (enc *Encoder) Err() error {
+	enc.mu.Lock()
+	defer enc.mu.Unlock()
 	_, err := enc.w.Write(nil)
 	return err
 }
