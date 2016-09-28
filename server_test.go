@@ -419,3 +419,41 @@ func TestTwstat(t *testing.T) {
 		t.Logf("effected %s requests via Twstat messages", got)
 	}
 }
+
+func TestWalk(t *testing.T) {
+	var count int
+	srv := testServer{test: t}
+	srv.callback = func(req, rsp styxproto.Msg) {
+		if _, ok := req.(styxproto.Twalk); ok {
+			if _, ok := rsp.(styxproto.Rwalk); !ok {
+				t.Errorf("got %T response to %T", rsp, req)
+			}
+		}
+	}
+	srv.handler = HandlerFunc(func(s *Session) {
+		for s.Next() {
+			switch req := s.Request().(type) {
+			case Twalk:
+				count++
+				t.Logf("Twalk %s", req.Path())
+				if !strings.HasPrefix(req.Path(), "/") {
+					t.Errorf("got non-absolute Twalk path %s", req.Path())
+				}
+				if strings.Contains(req.Path(), "..") {
+					t.Errorf("got non-cleaned Twalk path %s", req.Path())
+				}
+				req.Rwalk(os.Stat("/"))
+			}
+		}
+	})
+
+	walkPath := "foo/../foo/bar/bar/../../foo"
+	elem := strings.Split(walkPath, "/")
+	srv.runMsg(func(enc *styxproto.Encoder) {
+		enc.Twalk(1, 0, 1, elem...)
+	})
+
+	if count != len(elem) {
+		t.Errorf("Twalk(%q) generated %d, requests, wanted %d", count, len(elem))
+	}
+}
