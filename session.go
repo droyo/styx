@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"aqwari.net/net/styx/internal/styxfile"
+	"aqwari.net/net/styx/internal/threadsafe"
 	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 )
@@ -68,7 +69,7 @@ type Session struct {
 	util.RefCount
 
 	// Open (or unopened) files, indexed by fid.
-	files *util.Map
+	files *threadsafe.Map
 }
 
 // create a new session and register its fid in the conn.
@@ -83,7 +84,7 @@ func newSession(c *conn, m fattach) *Session {
 		User:     string(m.Uname()),
 		Access:   string(m.Aname()),
 		conn:     c,
-		files:    util.NewMap(),
+		files:    threadsafe.NewMap(),
 		authC:    make(chan error, 1),
 		requests: make(chan Request),
 	}

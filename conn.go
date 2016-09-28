@@ -9,8 +9,8 @@ import (
 
 	"aqwari.net/net/styx/internal/qidpool"
 	"aqwari.net/net/styx/internal/styxfile"
+	"aqwari.net/net/styx/internal/threadsafe"
 	"aqwari.net/net/styx/internal/tracing"
-	"aqwari.net/net/styx/internal/util"
 	"aqwari.net/net/styx/styxproto"
 
 	"context"
@@ -68,14 +68,14 @@ type conn struct {
 	// for a connection must be derived from the fid established
 	// in a Tattach call, any message that contains a fid can be
 	// traced back to the original Tattach message.
-	sessionFid *util.Map
+	sessionFid *threadsafe.Map
 
 	// Qids for the file tree, added on-demand.
 	qidpool *qidpool.Pool
 
 	// used to implement request cancellation when a Tflush
 	// message is received.
-	pendingReq *util.Map
+	pendingReq *threadsafe.Map
 }
 
 func (c *conn) remoteAddr() net.Addr {
@@ -151,8 +151,8 @@ func newConn(srv *Server, rwc io.ReadWriteCloser) *conn {
 		rwc:        rwc,
 		cx:         context.TODO(),
 		msize:      msize,
-		sessionFid: util.NewMap(),
-		pendingReq: util.NewMap(),
+		sessionFid: threadsafe.NewMap(),
+		pendingReq: threadsafe.NewMap(),
 		qidpool:    qidpool.New(),
 	}
 }

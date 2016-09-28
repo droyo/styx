@@ -1,4 +1,6 @@
-package util
+// Package threadsafe implements data structures that
+// are safe for use from multiple goroutines.
+package threadsafe
 
 import (
 	"reflect"

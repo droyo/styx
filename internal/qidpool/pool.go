@@ -5,7 +5,7 @@ package qidpool
 import (
 	"sync/atomic"
 
-	"aqwari.net/net/styx/internal/util"
+	"aqwari.net/net/styx/internal/threadsafe"
 	"aqwari.net/net/styx/styxproto"
 )
 
@@ -13,13 +13,13 @@ import (
 // for files on a 9P file server. A Pool must be created
 // with a call to New.
 type Pool struct {
-	m    *util.Map
+	m    *threadsafe.Map
 	path uint64
 }
 
 // New returns a new, empty Pool.
 func New() *Pool {
-	return &Pool{m: util.NewMap()}
+	return &Pool{m: threadsafe.NewMap()}
 }
 
 // Put creates a new, unique Qid of the given type and adds it to the
