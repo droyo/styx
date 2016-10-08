@@ -57,7 +57,7 @@ type conn struct {
 
 	// This serves as the parent context for the context attached to all
 	// requests.
-	cx context.Context
+	ctx context.Context
 
 	// While srv.MaxSize holds the *desired* 9P protocol message
 	// size, msize will contain the actual maximum negotiated with
@@ -149,7 +149,7 @@ func newConn(srv *Server, rwc io.ReadWriteCloser) *conn {
 		Encoder:    enc,
 		srv:        srv,
 		rwc:        rwc,
-		cx:         context.TODO(),
+		ctx:        context.TODO(),
 		msize:      msize,
 		sessionFid: threadsafe.NewMap(),
 		pendingReq: threadsafe.NewMap(),
@@ -198,18 +198,18 @@ func (c *conn) handleMessage(m styxproto.Msg) bool {
 		c.srv.logf("fatal: client re-used existing tag %d", m.Tag())
 		return false
 	}
-	cx, cancel := context.WithCancel(c.cx)
+	ctx, cancel := context.WithCancel(c.ctx)
 	c.pendingReq.Put(m.Tag(), cancel)
 
 	switch m := m.(type) {
 	case styxproto.Tauth:
-		return c.handleTauth(cx, m)
+		return c.handleTauth(ctx, m)
 	case styxproto.Tattach:
-		return c.handleTattach(cx, m)
+		return c.handleTattach(ctx, m)
 	case styxproto.Tflush:
-		return c.handleTflush(cx, m)
+		return c.handleTflush(ctx, m)
 	case fcall:
-		return c.handleFcall(cx, m)
+		return c.handleFcall(ctx, m)
 	case styxproto.BadMessage:
 		c.srv.logf("got bad message from %s: %s", c.remoteAddr(), m.Err)
 		c.clearTag(m.Tag())
@@ -267,7 +267,7 @@ func (c *conn) acceptTversion() bool {
 // - rate-limiting Tauth requests
 // - Setting a per-connection session limit
 // - close connections that have not established a session in N seconds
-func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
+func (c *conn) handleTauth(ctx context.Context, m styxproto.Tauth) bool {
 	defer c.Flush()
 	if c.srv.Auth == nil {
 		c.clearTag(m.Tag())
@@ -281,7 +281,7 @@ func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
 	}
 	client, server := net.Pipe()
 	ch := &Channel{
-		Context:         c.cx,
+		Context:         c.ctx,
 		ReadWriteCloser: server,
 	}
 	rwc, err := styxfile.New(client)
@@ -301,7 +301,7 @@ func (c *conn) handleTauth(cx context.Context, m styxproto.Tauth) bool {
 	return true
 }
 
-func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
+func (c *conn) handleTattach(ctx context.Context, m styxproto.Tattach) bool {
 	defer c.Flush()
 	var handler Handler = HandlerFunc(func(s *Session) {
 		for s.Next() {
@@ -348,7 +348,7 @@ func (c *conn) handleTattach(cx context.Context, m styxproto.Tattach) bool {
 	return true
 }
 
-func (c *conn) handleTflush(cx context.Context, m styxproto.Tflush) bool {
+func (c *conn) handleTflush(ctx context.Context, m styxproto.Tflush) bool {
 	c.clearTag(m.Oldtag())
 
 	if c.clearTag(m.Tag()) {
@@ -358,7 +358,7 @@ func (c *conn) handleTflush(cx context.Context, m styxproto.Tflush) bool {
 	return true
 }
 
-func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
+func (c *conn) handleFcall(ctx context.Context, msg fcall) bool {
 	s, ok := c.sessionByFid(msg.Fid())
 	if !ok {
 		c.clearTag(msg.Tag())
@@ -395,23 +395,23 @@ func (c *conn) handleFcall(cx context.Context, msg fcall) bool {
 
 	switch msg := msg.(type) {
 	case styxproto.Twalk:
-		return s.handleTwalk(cx, msg, file)
+		return s.handleTwalk(ctx, msg, file)
 	case styxproto.Topen:
-		return s.handleTopen(cx, msg, file)
+		return s.handleTopen(ctx, msg, file)
 	case styxproto.Tcreate:
-		return s.handleTcreate(cx, msg, file)
+		return s.handleTcreate(ctx, msg, file)
 	case styxproto.Tread:
-		return s.handleTread(cx, msg, file)
+		return s.handleTread(ctx, msg, file)
 	case styxproto.Twrite:
-		return s.handleTwrite(cx, msg, file)
+		return s.handleTwrite(ctx, msg, file)
 	case styxproto.Tremove:
-		return s.handleTremove(cx, msg, file)
+		return s.handleTremove(ctx, msg, file)
 	case styxproto.Tstat:
-		return s.handleTstat(cx, msg, file)
+		return s.handleTstat(ctx, msg, file)
 	case styxproto.Twstat:
-		return s.handleTwstat(cx, msg, file)
+		return s.handleTwstat(ctx, msg, file)
 	case styxproto.Tclunk:
-		return s.handleTclunk(cx, msg, file)
+		return s.handleTclunk(ctx, msg, file)
 	}
 	// invalid messages should have been caught
 	// in the conn.serve loop, so we should never

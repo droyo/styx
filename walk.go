@@ -64,13 +64,13 @@ type walker struct {
 	path        string
 
 	// for cancellation
-	cx context.Context
+	ctx context.Context
 
 	session *Session
 	tag     uint16
 }
 
-func newWalker(s *Session, cx context.Context, msg styxproto.Twalk, base string, elem ...string) *walker {
+func newWalker(s *Session, ctx context.Context, msg styxproto.Twalk, base string, elem ...string) *walker {
 	qids := make([]styxproto.Qid, len(elem))
 	found := qids[:0]
 	newpath := path.Join(base, strings.Join(elem, "/"))
@@ -84,7 +84,7 @@ func newWalker(s *Session, cx context.Context, msg styxproto.Twalk, base string,
 		newfid:   msg.Newfid(),
 		path:     newpath,
 		tag:      msg.Tag(),
-		cx:       cx,
+		ctx:      ctx,
 	}
 	go w.run()
 	return w
@@ -96,7 +96,7 @@ func (w *walker) run() {
 Loop:
 	for {
 		select {
-		case <-w.cx.Done():
+		case <-w.ctx.Done():
 			break Loop
 		case el, ok := <-w.collect:
 			if !ok {

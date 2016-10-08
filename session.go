@@ -160,7 +160,7 @@ func (s *Session) UpdateRequest(r Request) {
 	s.req = r
 }
 
-func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file) bool {
+func (s *Session) handleTwalk(ctx context.Context, msg styxproto.Twalk, file file) bool {
 	newfid := msg.Newfid()
 
 	// Cannot use "opened" (ready for IO) fids for walking; see walk(5)
@@ -202,20 +202,20 @@ func (s *Session) handleTwalk(cx context.Context, msg styxproto.Twalk, file file
 	for i := 0; i < cap(elem); i++ {
 		elem = append(elem, string(msg.Wname(i)))
 	}
-	walker := newWalker(s, cx, msg, file.name, elem...)
+	walker := newWalker(s, ctx, msg, file.name, elem...)
 
 	for i := range elem {
 		fullpath := path.Join(file.name, strings.Join(elem[:i+1], "/"))
 		s.requests <- Twalk{
 			index:   i,
 			walk:    walker,
-			reqInfo: newReqInfo(cx, s, msg, fullpath),
+			reqInfo: newReqInfo(ctx, s, msg, fullpath),
 		}
 	}
 	return true
 }
 
-func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file) bool {
+func (s *Session) handleTopen(ctx context.Context, msg styxproto.Topen, file file) bool {
 	if file.rwc != nil {
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "fid %d already open", msg.Fid())
@@ -225,12 +225,12 @@ func (s *Session) handleTopen(cx context.Context, msg styxproto.Topen, file file
 	flag := openFlag(msg.Mode())
 	s.requests <- Topen{
 		Flag:    flag,
-		reqInfo: newReqInfo(cx, s, msg, file.name),
+		reqInfo: newReqInfo(ctx, s, msg, file.name),
 	}
 	return true
 }
 
-func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file file) bool {
+func (s *Session) handleTcreate(ctx context.Context, msg styxproto.Tcreate, file file) bool {
 	qid := s.conn.qid(file.name, 0)
 	if qid.Type()&styxproto.QTDIR == 0 {
 		s.conn.clearTag(msg.Tag())
@@ -242,19 +242,19 @@ func (s *Session) handleTcreate(cx context.Context, msg styxproto.Tcreate, file 
 		Name:    string(msg.Name()),
 		Mode:    styxfile.ModeOS(msg.Perm()),
 		Flag:    openFlag(msg.Mode()),
-		reqInfo: newReqInfo(cx, s, msg, file.name),
+		reqInfo: newReqInfo(ctx, s, msg, file.name),
 	}
 	return true
 }
 
-func (s *Session) handleTremove(cx context.Context, msg styxproto.Tremove, file file) bool {
+func (s *Session) handleTremove(ctx context.Context, msg styxproto.Tremove, file file) bool {
 	s.requests <- Tremove{
-		reqInfo: newReqInfo(cx, s, msg, file.name),
+		reqInfo: newReqInfo(ctx, s, msg, file.name),
 	}
 	return true
 }
 
-func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file) bool {
+func (s *Session) handleTstat(ctx context.Context, msg styxproto.Tstat, file file) bool {
 	buf := make([]byte, styxproto.MaxStatLen)
 	if file.auth {
 		stat, _, err := styxproto.NewStat(buf, "", "", "", "")
@@ -280,13 +280,13 @@ func (s *Session) handleTstat(cx context.Context, msg styxproto.Tstat, file file
 		s.conn.Flush()
 	} else {
 		s.requests <- Tstat{
-			reqInfo: newReqInfo(cx, s, msg, file.name),
+			reqInfo: newReqInfo(ctx, s, msg, file.name),
 		}
 	}
 	return true
 }
 
-func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file) bool {
+func (s *Session) handleTread(ctx context.Context, msg styxproto.Tread, file file) bool {
 	var n int
 	var err error
 	if file.rwc == nil {
@@ -305,7 +305,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 		// we don't know how much we are going to write until it's too late.
 		buf := make([]byte, int(msg.Count()))
 
-		if t, ok := cx.Deadline(); ok {
+		if t, ok := ctx.Deadline(); ok {
 			styxfile.SetDeadline(file.rwc, t)
 		}
 		done := make(chan struct{})
@@ -314,7 +314,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 			close(done)
 		}()
 		select {
-		case <-cx.Done():
+		case <-ctx.Done():
 			// NOTE(droyo) deciding what to do here is somewhat
 			// difficult. Many (but not all) Read/Write calls in Go can
 			// be interrupted by calling Close. Obviously, calling Close
@@ -339,7 +339,7 @@ func (s *Session) handleTread(cx context.Context, msg styxproto.Tread, file file
 	return true
 }
 
-func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file file) bool {
+func (s *Session) handleTwrite(ctx context.Context, msg styxproto.Twrite, file file) bool {
 	if file.rwc == nil {
 		s.conn.clearTag(msg.Tag())
 		s.conn.Rerror(msg.Tag(), "file %q is not opened for writing", file.name)
@@ -360,7 +360,7 @@ func (s *Session) handleTwrite(cx context.Context, msg styxproto.Twrite, file fi
 	return true
 }
 
-func (s *Session) handleTclunk(cx context.Context, msg styxproto.Tclunk, file file) bool {
+func (s *Session) handleTclunk(ctx context.Context, msg styxproto.Tclunk, file file) bool {
 	defer s.conn.Flush()
 	s.conn.sessionFid.Del(msg.Fid())
 	s.conn.clearTag(msg.Tag())

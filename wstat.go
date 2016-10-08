@@ -59,7 +59,7 @@ func (t twstat) handled() bool {
 	return atomic.LoadInt32(&t.filled[t.index]) == 1
 }
 
-func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file file) bool {
+func (s *Session) handleTwstat(ctx context.Context, msg styxproto.Twstat, file file) bool {
 	// mode, atime+mtime, length, name, uid+gid, sync
 	// we will ignore muid
 	const numMutable = 6
@@ -75,7 +75,7 @@ func (s *Session) handleTwstat(cx context.Context, msg styxproto.Twstat, file fi
 	// We buffer the channel so that the response
 	// methods for each attribute do not block.
 	status := make(chan error, numMutable)
-	info := newReqInfo(cx, s, msg, file.name)
+	info := newReqInfo(ctx, s, msg, file.name)
 	filled := make([]int32, numMutable)
 
 	atime, mtime := stat.Atime(), stat.Mtime()
