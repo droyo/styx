@@ -413,3 +413,19 @@ func (s *Session) cleanupHandler() {
 		}
 	})
 }
+
+// Creates a sub-session running the handler's Serve9P
+// method. Requests can be sent to the session using
+// its requests channel, and its pipeline channel can
+// be used to receive the (possibly modified) request and
+// detect termination of the session.
+func runSubSession(s *Session, h Handler) *Session {
+	sub := *s
+	sub.requests = make(chan Request)
+	sub.pipeline = make(chan Request)
+	go func() {
+		defer close(sub.pipeline)
+		h.Serve9P(&sub)
+	}()
+	return &sub
+}

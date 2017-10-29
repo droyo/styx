@@ -156,7 +156,7 @@ func (t Topen) Ropen(rwc interface{}, err error) {
 	}
 
 	if err != nil {
-		t.session.conn.srv.logf("%s open %s failed: %s", t.path, err)
+		t.session.conn.srv.logf("open %s failed: %s", t.path, err)
 
 		// Don't want to expose too many implementation details
 		// to clients.
@@ -190,7 +190,7 @@ func (t Tstat) WithContext(ctx context.Context) Request {
 // Rstat responds to a succesful Tstat request. The styx package will
 // translate the os.FileInfo value into the appropriate 9P structure. Rstat
 // will attempt to resolve the names of the file's owner and group. If
-// that cannot be done, an empty string is sent. If err is non-nil, and error
+// that cannot be done, an empty string is sent. If err is non-nil, an Rerror
 // is sent to the client instead.
 func (t Tstat) Rstat(info os.FileInfo, err error) {
 	if err != nil {
@@ -248,7 +248,7 @@ func (t Tcreate) NewPath() string {
 // Path returns the absolute path to the containing directory of the
 // new file.
 func (t Tcreate) Path() string {
-	return t.reqInfo.Path() // overrode this method for the godoc comments
+	return t.reqInfo.Path() // overrode this method for the godoc comment
 }
 
 // Rcreate is used to respond to a succesful create request. With 9P, creating
@@ -338,4 +338,35 @@ func (t Tremove) Rremove(err error) {
 	if !t.session.DecRef() {
 		t.session.close()
 	}
+}
+
+func replacePath(req Request, newpath string) Request {
+	var result Request
+	switch req := req.(type) {
+	case Tchmod:
+		req.path = newpath
+	case Tchown:
+		req.path = newpath
+	case Tcreate:
+		req.path = newpath
+	case Topen:
+		req.path = newpath
+	case Tremove:
+		req.path = newpath
+	case Trename:
+		req.OldPath = newpath
+	case Tstat:
+		req.path = newpath
+	case Tsync:
+		req.path = newpath
+	case Ttruncate:
+		req.path = newpath
+	case Tutimes:
+		req.path = newpath
+	case Twalk:
+		req.path = newpath
+	default:
+		panic(fmt.Sprintf("styx: unexpected request type %T", req))
+	}
+	return result
 }
