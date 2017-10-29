@@ -4,21 +4,21 @@ import "testing"
 
 func TestBasic(t *testing.T) {
 	fs := New()
-	fs.Put("/usr/bin", nil)
-	fs.Put("/usr/lib64", nil)
+	fs.Put("/usr/bin", 0, nil)
+	fs.Put("/usr/lib64", 0, nil)
 
 	dir, _ := fs.Get("/usr/../usr/./././/")
 	for _, entry := range dir.Children {
 		t.Log(entry.Name)
 	}
-	for path, entry := range fs.index {
+	for path, entry := range fs.Index {
 		t.Logf("%s: %s", path, entry.Name())
 	}
 }
 
 func TestSameValue(t *testing.T) {
 	fs := New()
-	fs.Put("/usr/bin/emacs", "vi")
+	fs.Put("/usr/bin/emacs", 0, "vi")
 
 	entry, ok := fs.Get("/usr/bin")
 	if !ok {
@@ -45,7 +45,7 @@ func TestMatch(t *testing.T) {
 		descendant = "/usr/local/bin/httpd"
 	)
 	fs := New()
-	fs.Put(ancestor, "foo")
+	fs.Put(ancestor, 0, "foo")
 
 	entry, ok := fs.LongestPrefix(descendant)
 	if !ok {

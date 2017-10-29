@@ -19,12 +19,12 @@ type ServeMux struct {
 }
 
 type muxEntry struct {
-	entry filetree.Entry
-	n     int
+	filetree.Entry
+	n int
 }
 
 func (e *muxEntry) Readdir(n int) ([]os.FileInfo, error) {
-	children := e.entry.Children[e.n:]
+	children := e.Children[e.n:]
 	if n < 0 || n > len(children) {
 		n = len(children)
 	}
@@ -32,9 +32,10 @@ func (e *muxEntry) Readdir(n int) ([]os.FileInfo, error) {
 		return nil, io.EOF
 	}
 	fi := make([]os.FileInfo, 0, n)
-	for _, c := range children[:n] {
-		fi = append(fi, &c)
+	for i := range children[:n] {
+		fi = append(fi, &children[i])
 	}
+	e.n = n
 	return fi, nil
 }
 
@@ -61,7 +62,7 @@ func (mux *ServeMux) gentree(s *Session) *filetree.Tree {
 
 	for pat, handler := range mux.tree {
 		sub := runSubSession(s, StripPrefix(pat, handler))
-		tree.Put(pat, sub)
+		tree.Put(pat, os.ModeDir|0777, sub)
 	}
 	return tree
 }
@@ -78,18 +79,19 @@ func (mux *ServeMux) Serve9P(s *Session) {
 			continue
 		}
 		switch {
-		case match.Value == nil:
+		case match.Value == nil || match.FullName == r.Path():
 			// This is an intermediate directory in /path/to/handler,
 			// we'll serve it as a read-only directory for the user.
 			switch r := r.(type) {
 			case Topen:
-				r.Ropen(&muxEntry{entry: match}, nil)
+				r.Ropen(&muxEntry{Entry: match}, nil)
 			case Tstat:
-				r.Rstat(&muxEntry{entry: match}, nil)
+				r.Rstat(&match, nil)
 			case Twalk:
-				r.Rwalk(&muxEntry{entry: match}, nil)
+				fmt.Printf("%s %v %o\n", r.Path(), match.IsDir(), match.Mode())
+				r.Rwalk(&match, nil)
 			}
-		case len(r.Path()) >= len(match.Name):
+		case len(r.Path()) >= len(match.FullName):
 			// The request is for a file under the purview of a
 			// registered Handler. Pass it along.
 			session := match.Value.(*Session)

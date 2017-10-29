@@ -1,5 +1,7 @@
 package styx
 
+import "strings"
+
 // Stack combines multiple handlers into one. When a new message is received
 // from the client, it is passed to each handler, from left to right,
 // until a response is sent. If no response is sent by any handlers in the
@@ -64,10 +66,17 @@ func StripPrefix(prefix string, h Handler) Handler {
 	strip := func(s *Session) {
 		for s.Next() {
 			req := s.Request()
+			if r, ok := req.(Trename); ok {
+				if strings.HasPrefix(r.NewPath, prefix) {
+					r.NewPath = r.NewPath[len(prefix):]
+					req = r
+				}
+			}
 			if p := req.Path(); strings.HasPrefix(p, prefix) {
-				req.setPath(r[len(prefix):])
+				req = replacePath(req, p[len(prefix):])
 				s.UpdateRequest(req)
 			}
-	})
-	return Stack(strip, h)
+		}
+	}
+	return Stack(HandlerFunc(strip), h)
 }
