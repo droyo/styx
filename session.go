@@ -270,7 +270,7 @@ func (s *Session) handleTstat(ctx context.Context, msg styxproto.Tstat, file fil
 		s.conn.Flush()
 	} else if file.rwc != nil {
 		s.conn.clearTag(msg.Tag())
-		if qid, ok := s.conn.qidpool.Get(file.name); !ok {
+		if qid, ok := s.conn.qidpool.Load(file.name); !ok {
 			s.conn.Rerror(msg.Tag(), "qid for %s not found", file.name)
 		} else if stat, err := styxfile.Stat(buf, file.rwc, file.name, qid); err != nil {
 			s.conn.Rerror(msg.Tag(), "%s", err)

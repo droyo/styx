@@ -191,11 +191,10 @@ func (t Trename) Rrename(err error) {
 	// requests that attempt to clone another fid pointing to the
 	// same file.
 	if err == nil {
-		t.session.qidpool.Do(func(m map[interface{}]interface{}) {
-			if qid, ok := m[t.OldPath]; ok {
-				m[t.NewPath] = qid
-			}
-		})
+		if qid, ok := t.session.qidpool.Load(t.OldPath); ok {
+			t.session.qidpool.LoadOrStoreQid(t.NewPath, qid)
+			t.session.qidpool.Del(t.OldPath)
+		}
 	}
 	t.respond(err)
 }

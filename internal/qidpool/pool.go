@@ -3,9 +3,9 @@
 package qidpool
 
 import (
+	"sync"
 	"sync/atomic"
 
-	"aqwari.net/net/styx/internal/threadsafe"
 	"aqwari.net/net/styx/styxproto"
 )
 
@@ -13,20 +13,24 @@ import (
 // for files on a 9P file server. A Pool must be created
 // with a call to New.
 type Pool struct {
-	m    *threadsafe.Map
+	m    sync.Map
 	path uint64
 }
 
 // New returns a new, empty Pool.
 func New() *Pool {
-	return &Pool{m: threadsafe.NewMap()}
+	return &Pool{}
 }
 
-// Put creates a new, unique Qid of the given type and adds it to the
-// pool. The returned Qid should be considered read-only. Put will not
-// overwrite an existing Qid; if there is already a Qid associated with name,
+// LoadOrStore creates a new, unique Qid of the given type and adds it to
+// the pool. The returned Qid should be considered read-only. Put will not
+// modify an existing Qid; if there is already a Qid associated with name,
 // it is returned instead.
-func (p *Pool) Put(name string, qtype uint8) styxproto.Qid {
+func (p *Pool) LoadOrStore(name string, qtype uint8) styxproto.Qid {
+	println("qidpool.LoadOrStore", name, qtype)
+	if v, ok := p.m.Load(name); ok {
+		return v.(styxproto.Qid)
+	}
 	buf := make([]byte, styxproto.QidLen)
 	path := atomic.AddUint64(&p.path, 1)
 
@@ -35,32 +39,24 @@ func (p *Pool) Put(name string, qtype uint8) styxproto.Qid {
 		panic(err)
 	}
 
-	p.m.Do(func(m map[interface{}]interface{}) {
-		if existing, ok := m[name]; ok {
-			qid = existing.(styxproto.Qid)
-		} else {
-			m[name] = qid
-		}
-	})
-	p.m.Put(name, qid)
-	return qid
+	return p.LoadOrStoreQid(name, qid)
+}
+
+func (p *Pool) LoadOrStoreQid(name string, qid styxproto.Qid) styxproto.Qid {
+	actual, _ := p.m.LoadOrStore(name, qid)
+	return actual.(styxproto.Qid)
 }
 
 // Del removes a Qid from a Pool. Once a Qid is removed from a pool, it
 // will never be used again.
 func (p *Pool) Del(name string) {
-	p.m.Del(name)
+	p.m.Delete(name)
 }
 
-// Do calls fn while holding the write lock for the pool
-func (p *Pool) Do(fn func(map[interface{}]interface{})) {
-	p.m.Do(fn)
-}
-
-// Get fetches the Qid currently associated with name from the pool. The
+// Load fetches the Qid currently associated with name from the pool. The
 // Qid is only valid if the second return value is true.
-func (p *Pool) Get(name string) (styxproto.Qid, bool) {
-	if v, ok := p.m.Get(name); ok {
+func (p *Pool) Load(name string) (styxproto.Qid, bool) {
+	if v, ok := p.m.Load(name); ok {
 		return v.(styxproto.Qid), true
 	}
 	return nil, false

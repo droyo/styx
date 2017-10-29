@@ -158,7 +158,8 @@ func newConn(srv *Server, rwc io.ReadWriteCloser) *conn {
 }
 
 func (c *conn) qid(name string, qtype uint8) styxproto.Qid {
-	return c.qidpool.Put(name, qtype)
+	qid := c.qidpool.LoadOrStore(name, qtype)
+	return qid
 }
 
 // All request contexts must have their cancel functions

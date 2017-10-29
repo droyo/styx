@@ -91,7 +91,7 @@ func marshalStats(buf []byte, files []os.FileInfo, dir string, pool *qidpool.Poo
 		stat.SetAtime(stat.Mtime())
 		stat.SetLength(fi.Size())
 		stat.SetMode(mode)
-		stat.SetQid(pool.Put(path.Join(dir, fi.Name()), qtype))
+		stat.SetQid(pool.LoadOrStore(path.Join(dir, fi.Name()), qtype))
 	}
 	return n, err
 }
