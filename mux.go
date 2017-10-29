@@ -88,7 +88,6 @@ func (mux *ServeMux) Serve9P(s *Session) {
 			case Tstat:
 				r.Rstat(&match, nil)
 			case Twalk:
-				fmt.Printf("%s %v %o\n", r.Path(), match.IsDir(), match.Mode())
 				r.Rwalk(&match, nil)
 			}
 		case len(r.Path()) >= len(match.FullName):
