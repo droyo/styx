@@ -1,11 +1,11 @@
 package styx
 
 // Stack combines multiple handlers into one. When a new message is received
-// from the client, it is passed to each handler, from left to right, until a
-// response is sent. If no response is sent.  by any handlers in the stack,
-// the documented default response for that message type will be sent to
-// the client. Handlers may use the UpdateRequest to pass information to
-// downstream handlers.
+// from the client, it is passed to each handler, from left to right,
+// until a response is sent. If no response is sent by any handlers in the
+// stack, the documented default response for that message type will be
+// sent to the client. Handlers may use UpdateRequest to pass information
+// to downstream handlers.
 func Stack(handlers ...Handler) Handler {
 	h := make([]Handler, len(handlers))
 	copy(h, handlers)
@@ -22,8 +22,8 @@ func (handlers stack) Serve9P(s *Session) {
 		sub.requests = make(chan Request)
 		sub.pipeline = make(chan Request)
 		go func(h Handler) {
+			defer close(sub.pipeline)
 			h.Serve9P(sub)
-			close(sub.pipeline)
 		}(handler)
 	}
 	for s.Next() {
@@ -55,4 +55,19 @@ Cleanup:
 		for range h.pipeline {
 		}
 	}
+}
+
+// StripPrefix creates a Handler that removes the given prefix from
+// a Request's path before passing it to the Handler h. Requests
+// that do not match prefix are passed through unchanged.
+func StripPrefix(prefix string, h Handler) Handler {
+	strip := func(s *Session) {
+		for s.Next() {
+			req := s.Request()
+			if p := req.Path(); strings.HasPrefix(p, prefix) {
+				req.setPath(r[len(prefix):])
+				s.UpdateRequest(req)
+			}
+	})
+	return Stack(strip, h)
 }

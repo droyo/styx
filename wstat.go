@@ -289,8 +289,8 @@ func (t Ttruncate) Rtruncate(err error) { t.respond(err) }
 // like any changes made to the file to be flushed to durable storage. Use
 // the Rsync method to indicate success.
 //
-// The default response to a Tsync message is an Rerror message saying
-// "not supported".
+// The default response to a Tsync message is an Rsync message,
+// indicating success.
 type Tsync struct {
 	twstat
 }
@@ -306,4 +306,4 @@ func (t Tsync) WithContext(ctx context.Context) Request {
 // different consistency guarantees.
 func (t Tsync) Rsync(err error) { t.respond(err) }
 
-func (t Tsync) defaultResponse() { t.Rerror("not supported") }
+func (t Tsync) defaultResponse() { t.Rsync(nil) }
