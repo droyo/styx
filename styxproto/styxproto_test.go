@@ -33,7 +33,7 @@ func testParseMsgFile(t *testing.T, filename string) {
 	testParseMsg(t, file)
 }
 
-// These are in lieu of compile-time constraints
+// This is in lieu of compile-time constraints
 func TestMinSize(t *testing.T) {
 	for _, v := range minSizeLUT {
 		if v == 0 {

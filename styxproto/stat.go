@@ -7,8 +7,7 @@ import (
 
 // The Stat structure describes a directory entry. It is contained in
 // Rstat and Twstat messages. Tread requests on directories return
-// a Stat structure for each directory entry. A Stat implements the
-// os.FileInfo interface.
+// a Stat structure for each directory entry.
 type Stat []byte
 
 // The 2-byte type field contains implementation-specific data
