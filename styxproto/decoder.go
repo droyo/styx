@@ -32,6 +32,7 @@ func NewDecoderSize(r io.Reader, bufsize int) *Decoder {
 	if bufsize < MinBufSize {
 		bufsize = MinBufSize
 	}
+	r = loggingReader{name: "under", r: r}
 	return &Decoder{r: r, br: bufio.NewReaderSize(r, bufsize), MaxSize: -1}
 }
 

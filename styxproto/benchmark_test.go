@@ -1,9 +1,13 @@
-package styxproto
+package styxproto_test
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"testing"
+
+	"aqwari.net/net/styx/internal/tracing"
+	"aqwari.net/net/styx/styxproto"
 )
 
 func benchmarkDecode(b *testing.B, filename string) {
@@ -12,13 +16,18 @@ func benchmarkDecode(b *testing.B, filename string) {
 		b.Fatal(err)
 	}
 	r := bytes.NewReader(data)
-	d := NewDecoder(r)
+	d := styxproto.NewDecoder(r)
 
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for d.Next() {
+			if r, ok := d.Msg().(io.Reader); ok {
+				if _, err := io.Copy(ioutil.Discard, r); err != nil {
+					b.Error(err)
+				}
+			}
 		}
 		if err := d.Err(); err != nil {
 			b.Error(err)
@@ -28,8 +37,8 @@ func benchmarkDecode(b *testing.B, filename string) {
 	}
 }
 
-func copyQid(q Qid) Qid {
-	c := make(Qid, QidLen)
+func copyQid(q styxproto.Qid) styxproto.Qid {
+	c := make(styxproto.Qid, styxproto.QidLen)
 	copy(c, q)
 	return c
 }
@@ -41,15 +50,23 @@ func benchmarkEncode(b *testing.B, filename string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	d := NewDecoder(bytes.NewReader(data))
 
-	var operations []func(*Encoder)
+	var operations []func(*styxproto.Encoder)
 
 	type Fcall interface {
 		Fid() uint32
 	}
+	nMsg := 0
+	var offset int64
+	logMsg := func(msg styxproto.Msg) {
+		nMsg++
+		b.Logf("%d %s tag=%d len=%d", nMsg, msg, msg.Tag(), msg.Len())
+		offset += msg.Len()
+	}
+	d := tracing.Decoder(bytes.NewReader(data), logMsg)
+	//d := styxproto.NewDecoder(bytes.NewReader(data))
 	for d.Next() {
-		var op func(*Encoder)
+		var op func(*styxproto.Encoder)
 		var fid uint32
 		tag := d.Msg().Tag()
 
@@ -59,115 +76,115 @@ func benchmarkEncode(b *testing.B, filename string) {
 		// Note: Decoder's reuse buffer space when Next is called, so
 		// we have to make sure to copy any memory used in an operation
 		switch m := d.Msg().(type) {
-		case Rattach:
+		case styxproto.Rattach:
 			qid := copyQid(m.Qid())
-			op = func(e *Encoder) { e.Rattach(tag, qid) }
-		case Rauth:
+			op = func(e *styxproto.Encoder) { e.Rattach(tag, qid) }
+		case styxproto.Rauth:
 			aqid := copyQid(m.Aqid())
-			op = func(e *Encoder) { e.Rauth(tag, aqid) }
-		case Rclunk:
-			op = func(e *Encoder) { e.Rclunk(tag) }
-		case Rcreate:
+			op = func(e *styxproto.Encoder) { e.Rauth(tag, aqid) }
+		case styxproto.Rclunk:
+			op = func(e *styxproto.Encoder) { e.Rclunk(tag) }
+		case styxproto.Rcreate:
 			qid := copyQid(m.Qid())
 			iounit := m.IOunit()
-			op = func(e *Encoder) { e.Rcreate(tag, qid, uint32(iounit)) }
-		case Rerror:
+			op = func(e *styxproto.Encoder) { e.Rcreate(tag, qid, uint32(iounit)) }
+		case styxproto.Rerror:
 			ename := m.String()
-			op = func(e *Encoder) { e.Rerror(tag, "%s", ename) }
-		case Rflush:
-			op = func(e *Encoder) { e.Rflush(tag) }
-		case Ropen:
+			op = func(e *styxproto.Encoder) { e.Rerror(tag, "%s", ename) }
+		case styxproto.Rflush:
+			op = func(e *styxproto.Encoder) { e.Rflush(tag) }
+		case styxproto.Ropen:
 			qid := copyQid(m.Qid())
 			iounit := m.IOunit()
-			op = func(e *Encoder) { e.Ropen(tag, qid, uint32(iounit)) }
-		case Rread:
+			op = func(e *styxproto.Encoder) { e.Ropen(tag, qid, uint32(iounit)) }
+		case styxproto.Rread:
 			data, err := ioutil.ReadAll(m)
 			if err != nil {
 				b.Fatal(err)
 			}
-			op = func(e *Encoder) { e.Rread(tag, data) }
-		case Rremove:
-			op = func(e *Encoder) { e.Rremove(tag) }
-		case Rstat:
-			stat := append(Stat{}, m.Stat()...)
-			op = func(e *Encoder) { e.Rstat(tag, stat) }
-		case Rversion:
+			op = func(e *styxproto.Encoder) { e.Rread(tag, data) }
+		case styxproto.Rremove:
+			op = func(e *styxproto.Encoder) { e.Rremove(tag) }
+		case styxproto.Rstat:
+			stat := append(styxproto.Stat{}, m.Stat()...)
+			op = func(e *styxproto.Encoder) { e.Rstat(tag, stat) }
+		case styxproto.Rversion:
 			version := string(m.Version())
 			msize := m.Msize()
-			op = func(e *Encoder) { e.Rversion(uint32(msize), version) }
-		case Rwalk:
-			wqid := make([]Qid, 0, m.Nwqid())
+			op = func(e *styxproto.Encoder) { e.Rversion(uint32(msize), version) }
+		case styxproto.Rwalk:
+			wqid := make([]styxproto.Qid, 0, m.Nwqid())
 			for i := 0; i < m.Nwqid(); i++ {
 				wqid = append(wqid, copyQid(m.Wqid(i)))
 			}
-			op = func(e *Encoder) { e.Rwalk(tag, wqid...) }
-		case Rwrite:
+			op = func(e *styxproto.Encoder) { e.Rwalk(tag, wqid...) }
+		case styxproto.Rwrite:
 			count := m.Count()
-			op = func(e *Encoder) { e.Rwrite(tag, int64(count)) }
-		case Rwstat:
-			op = func(e *Encoder) { e.Rwstat(tag) }
-		case Tattach:
+			op = func(e *styxproto.Encoder) { e.Rwrite(tag, int64(count)) }
+		case styxproto.Rwstat:
+			op = func(e *styxproto.Encoder) { e.Rwstat(tag) }
+		case styxproto.Tattach:
 			afid := m.Afid()
 			uname := string(m.Uname())
 			aname := string(m.Aname())
-			op = func(e *Encoder) { e.Tattach(tag, fid, afid, uname, aname) }
-		case Tauth:
+			op = func(e *styxproto.Encoder) { e.Tattach(tag, fid, afid, uname, aname) }
+		case styxproto.Tauth:
 			afid := m.Afid()
 			uname := string(m.Uname())
 			aname := string(m.Aname())
-			op = func(e *Encoder) { e.Tauth(tag, afid, uname, aname) }
-		case Tclunk:
-			op = func(e *Encoder) { e.Tclunk(tag, fid) }
-		case Tcreate:
+			op = func(e *styxproto.Encoder) { e.Tauth(tag, afid, uname, aname) }
+		case styxproto.Tclunk:
+			op = func(e *styxproto.Encoder) { e.Tclunk(tag, fid) }
+		case styxproto.Tcreate:
 			name := string(m.Name())
 			perm := m.Perm()
 			mode := m.Mode()
-			op = func(e *Encoder) { e.Tcreate(tag, fid, name, perm, mode) }
-		case Tflush:
+			op = func(e *styxproto.Encoder) { e.Tcreate(tag, fid, name, perm, mode) }
+		case styxproto.Tflush:
 			oldtag := m.Oldtag()
-			op = func(e *Encoder) { e.Tflush(tag, oldtag) }
-		case Topen:
+			op = func(e *styxproto.Encoder) { e.Tflush(tag, oldtag) }
+		case styxproto.Topen:
 			mode := m.Mode()
-			op = func(e *Encoder) { e.Topen(tag, fid, mode) }
-		case Tread:
+			op = func(e *styxproto.Encoder) { e.Topen(tag, fid, mode) }
+		case styxproto.Tread:
 			offset := m.Offset()
 			count := m.Count()
-			op = func(e *Encoder) { e.Tread(tag, fid, offset, count) }
-		case Tremove:
-			op = func(e *Encoder) { e.Tremove(tag, fid) }
-		case Tstat:
-			op = func(e *Encoder) { e.Tstat(tag, fid) }
-		case Tversion:
+			op = func(e *styxproto.Encoder) { e.Tread(tag, fid, offset, count) }
+		case styxproto.Tremove:
+			op = func(e *styxproto.Encoder) { e.Tremove(tag, fid) }
+		case styxproto.Tstat:
+			op = func(e *styxproto.Encoder) { e.Tstat(tag, fid) }
+		case styxproto.Tversion:
 			msize := m.Msize()
 			version := string(m.Version())
-			op = func(e *Encoder) { e.Tversion(uint32(msize), version) }
-		case Twalk:
+			op = func(e *styxproto.Encoder) { e.Tversion(uint32(msize), version) }
+		case styxproto.Twalk:
 			newfid := m.Newfid()
 			wname := make([]string, 0, m.Nwname())
 			for i := 0; i < m.Nwname(); i++ {
 				wname = append(wname, string(m.Wname(i)))
 			}
-			op = func(e *Encoder) { e.Twalk(tag, fid, newfid, wname...) }
-		case Twrite:
+			op = func(e *styxproto.Encoder) { e.Twalk(tag, fid, newfid, wname...) }
+		case styxproto.Twrite:
 			data, err := ioutil.ReadAll(m)
 			if err != nil {
 				b.Fatal(err)
 			}
 			offset := m.Offset()
-			op = func(e *Encoder) { e.Twrite(tag, fid, offset, data) }
-		case Twstat:
-			stat := append(Stat{}, m.Stat()...)
-			op = func(e *Encoder) { e.Twstat(tag, fid, stat) }
+			op = func(e *styxproto.Encoder) { e.Twrite(tag, fid, offset, data) }
+		case styxproto.Twstat:
+			stat := append(styxproto.Stat{}, m.Stat()...)
+			op = func(e *styxproto.Encoder) { e.Twstat(tag, fid, stat) }
 		default:
-			b.Fatalf("unhandled type %T in encoder benchmark", m)
+			b.Fatalf("%d offset %d unhandled %T message in encoder benchmark len=%d tag=%d: %s", nMsg, offset, m, m.Len(), m.Tag(), m)
 		}
 		operations = append(operations, op)
 	}
 	if err := d.Err(); d.Err() != nil {
-		b.Fatal(err)
+		b.Fatalf("%d message %v: %s", nMsg, d.Msg(), err)
 	}
 
-	e := NewEncoder(ioutil.Discard)
+	e := styxproto.NewEncoder(ioutil.Discard)
 	b.ResetTimer()
 	b.SetBytes(int64(len(data)))
 
@@ -182,3 +199,8 @@ func BenchmarkDecodeClient(b *testing.B) { benchmarkDecode(b, "testdata/sample.c
 func BenchmarkDecodeServer(b *testing.B) { benchmarkDecode(b, "testdata/sample.server.9p") }
 func BenchmarkEncodeClient(b *testing.B) { benchmarkEncode(b, "testdata/sample.client.9p") }
 func BenchmarkEncodeServer(b *testing.B) { benchmarkEncode(b, "testdata/sample.server.9p") }
+
+func BenchmarkDecodeIOHeavyClient(b *testing.B) { benchmarkDecode(b, "testdata/ioheavy.client.9p") }
+func BenchmarkDecodeIOHeavyServer(b *testing.B) { benchmarkDecode(b, "testdata/ioheavy.server.9p") }
+func BenchmarkEncodeIOHeavyClient(b *testing.B) { benchmarkEncode(b, "testdata/ioheavy.client.9p") }
+func BenchmarkEncodeIOHeavyServer(b *testing.B) { benchmarkEncode(b, "testdata/ioheavy.server.9p") }

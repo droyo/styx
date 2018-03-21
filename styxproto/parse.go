@@ -110,6 +110,7 @@ func (s *Decoder) readRW() (Msg, error) {
 	}
 
 	msg, err = s.growdot(readSize)
+	//println(readSize, "buffered", s.br.Buffered(), "dotlen", s.dotlen(), "buflen", s.buflen(), "msgSize", msgSize, "pos", s.pos)
 	if err != nil {
 		// we have already buffered IOHeaderSize bytes, so
 		// we are reading from the bufio.Reader's internal buffer.
@@ -146,7 +147,8 @@ func (s *Decoder) badMessage(bad msg, reason error) (Msg, error) {
 		return nil, errZeroLen
 	}
 	if int64(s.buflen()+s.dotlen()) < length {
-		return nil, errShortRead
+		//panic(fmt.Errorf("wanted %d+%d, got %d: %v %v", length, s.buflen(), s.dotlen(), reason, bad.Tag()))
+		return nil, reason
 	}
 	// We can still continue parsing. This prevents one bad client
 	// from hurting performance for others on the same connection.
@@ -335,11 +337,32 @@ func parseRread(dot msg, r io.Reader) (Msg, error) {
 	m.r = bytes.NewReader(buffered)
 	if int64(len(buffered)) < count {
 		m.r = io.MultiReader(
-			m.r,
-			io.LimitReader(r, count-int64(len(buffered))))
+			loggingReader{name: "Rread buf", r: m.r},
+			loggingReader{name: "Rread raw", r: io.LimitReader(r, count-int64(len(buffered)))})
+	} else {
+		m.r = loggingReader{name: "Rread std", r: m.r}
 	}
 
 	return m, nil
+}
+
+type loggingReader struct {
+	name string
+	r    io.Reader
+}
+
+func (r loggingReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	s := "nil"
+	if err != nil {
+		s = err.Error()
+	}
+	if l, ok := r.r.(*io.LimitedReader); ok {
+		println(r.name, "read", n, "bufsize", len(p), "error", s, "limit", l.N)
+	} else {
+		println(r.name, "read", n, "bufsize", len(p), "error", s)
+	}
+	return n, err
 }
 
 func parseTwrite(dot msg, r io.Reader) (Msg, error) {
@@ -365,8 +388,10 @@ func parseTwrite(dot msg, r io.Reader) (Msg, error) {
 	m.r = bytes.NewReader(buffered)
 	if int64(len(buffered)) < count {
 		m.r = io.MultiReader(
-			m.r,
-			io.LimitReader(r, count-int64(len(buffered))))
+			loggingReader{name: "Twrite buf", r: m.r},
+			loggingReader{name: "Twrite raw", r: io.LimitReader(r, count-int64(len(buffered)))})
+	} else {
+		m.r = loggingReader{name: "Twrite std", r: m.r}
 	}
 
 	return m, nil

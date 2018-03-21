@@ -1,6 +1,9 @@
 package styxproto
 
-import "unicode/utf8"
+import (
+	"fmt"
+	"unicode/utf8"
+)
 
 // verification functions for the various fields in a 9P message
 
@@ -14,7 +17,7 @@ func validType(t uint8) bool {
 func verifySizeAndType(m msg) error {
 	t, n := m.Type(), m.Len()
 	if !validType(t) {
-		return errInvalidMsgType
+		return fmt.Errorf("%s %d (len=%d) %v", errInvalidMsgType, t, n, m)
 	}
 	if min := int64(minSizeLUT[t]); n < min {
 		return errTooSmall

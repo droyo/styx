@@ -3,6 +3,7 @@ package styxproto
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -21,6 +22,14 @@ func TestResponse(t *testing.T) {
 
 func TestV9FSResponse(t *testing.T) {
 	testParseMsgFile(t, "testdata/v9fs.server.9p")
+}
+
+func TestIOHeavyRequest(t *testing.T) {
+	testParseMsgFile(t, "testdata/ioheavy.client.9p")
+}
+
+func TestIOHeavyResponse(t *testing.T) {
+	testParseMsgFile(t, "testdata/ioheavy.server.9p")
 }
 
 func testParseMsgFile(t *testing.T, filename string) {
@@ -71,7 +80,6 @@ func TestMinBufSize(t *testing.T) {
 
 func testParseMsg(t *testing.T, r io.Reader) {
 	n := 0
-	os.MkdirAll("testoutput", 0777)
 	p := NewDecoder(r)
 	for p.Next() {
 		m := p.Msg()
@@ -79,10 +87,16 @@ func testParseMsg(t *testing.T, r io.Reader) {
 			t.Error(b)
 			continue
 		}
-		if s, ok := m.(fmt.Stringer); ok {
-			t.Logf("%d %s", m.Tag(), s.String())
-		} else {
-			t.Logf("%d %s", m.Tag(), m)
+		//t.Logf("%d %s", m.Tag(), s.String())
+
+		// Exhaust any Twrite/Rread messages, since they are handled differently
+		// from the fix-sized messages.
+		if r, ok := m.(io.Reader); ok {
+			n, err := io.Copy(ioutil.Discard, r)
+			if err != nil {
+				t.Error(err)
+			}
+			t.Logf("read %d bytes from %d %s len=%d", n, m.Tag(), m, m.Len())
 		}
 		if false { // flip to generate data for fuzz testing
 			n++
