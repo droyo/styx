@@ -113,7 +113,12 @@ func (s *Decoder) Msg() Msg {
 // decoded 9P message.
 func (s *Decoder) Next() bool {
 	if s.msg != nil {
-		s.err = discard(s.br, s.msg.Len())
+		// Exhaust any Rread/Twrite messages to move the stream to the
+		// next message boundary.
+		if r, ok := s.msg.(io.Reader); ok {
+			_, s.err = io.Copy(ioutil.Discard, r)
+		}
+		s.err = discard(s.br, s.msg.nbytes())
 		s.msg = nil
 	}
 	if s.err != nil {
