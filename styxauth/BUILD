@@ -5,13 +5,9 @@ go_library(
     srcs = [
         "auth.go",
         "doc.go",
+        "socket.go",
         "tls.go",
-    ] + select({
-        "@io_bazel_rules_go//go/platform:linux": [
-            "socket.go",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
     importpath = "aqwari.net/net/styx/styxauth",
     visibility = ["//visibility:public"],
     deps = [

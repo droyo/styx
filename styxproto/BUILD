@@ -30,16 +30,10 @@ go_test(
     name = "go_default_test",
     srcs = [
         "encoding_test.go",
+        "example_test.go",
         "malformed_test.go",
         "styxproto_test.go",
     ],
     data = [":testdata"],
     embed = [":go_default_library"],
-)
-
-go_test(
-    name = "go_default_xtest",
-    srcs = ["example_test.go"],
-    data = glob(["testdata/**"]),
-    deps = [":go_default_library"],
 )

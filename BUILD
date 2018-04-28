@@ -30,20 +30,15 @@ go_library(
 
 go_test(
     name = "go_default_test",
-    srcs = ["server_test.go"],
-    embed = [":go_default_library"],
+    srcs = [
+        "example_stack_test.go",
+        "example_test.go",
+        "server_test.go",
+    ],
     data = ["//aqwari.net/net/styx/styxproto:testdata"],
+    embed = [":go_default_library"],
     deps = [
         "//aqwari.net/net/styx/internal/netutil:go_default_library",
         "//aqwari.net/net/styx/styxproto:go_default_library",
     ],
-)
-
-go_test(
-    name = "go_default_xtest",
-    srcs = [
-        "example_stack_test.go",
-        "example_test.go",
-    ],
-    deps = [":go_default_library"],
 )
