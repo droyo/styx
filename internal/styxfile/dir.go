@@ -58,9 +58,9 @@ func (d *dirReader) ReadAt(p []byte, offset int64) (int, error) {
 	// by buffering Readdir's results.
 	nstats := len(p) / styxproto.MaxStatLen
 
-	if nstats == 0 {
+	/*if nstats == 0 {
 		return 0, ErrSmallRead
-	}
+	}*/
 
 	files, err := d.Readdir(nstats)
 	n, marshalErr := marshalStats(p, files, d.path, d.pool)
