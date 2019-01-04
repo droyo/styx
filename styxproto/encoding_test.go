@@ -28,7 +28,7 @@ func TestEncode(t *testing.T) {
 			t.Logf("%T %s", msg, msg)
 		}
 		if dec.Err() != nil {
-			t.Fatal("× %s", dec.Err())
+			t.Fatalf("× %s", dec.Err())
 		}
 	}
 
