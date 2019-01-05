@@ -40,6 +40,6 @@ func TestMap(t *testing.T) {
 	if !m.Fetch("foo", &x) {
 		t.Error("m.Fetch did not find \"foo\" in map")
 	} else if x != 83 {
-		t.Error("m.Update did not update value for \"foo\" (%v)", x)
+		t.Errorf("m.Update did not update value for \"foo\" (%v)", x)
 	}
 }

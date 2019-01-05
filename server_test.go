@@ -454,6 +454,6 @@ func TestWalk(t *testing.T) {
 	})
 
 	if count != len(elem) {
-		t.Errorf("Twalk(%q) generated %d, requests, wanted %d", count, len(elem))
+		t.Errorf("Twalk(%q) generated %d, requests, wanted %d", walkPath, count, len(elem))
 	}
 }
