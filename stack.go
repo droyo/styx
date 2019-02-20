@@ -17,10 +17,15 @@ type stack []Handler
 func (handlers stack) Serve9P(s *Session) {
 	running := make([]Session, len(handlers))
 	for i, handler := range handlers {
-		running[i] = *s
 		sub := &running[i]
+		sub.User = s.User
+		sub.Access = s.Access
 		sub.requests = make(chan Request)
 		sub.pipeline = make(chan Request)
+		sub.authC = s.authC
+		sub.conn = s.conn
+		sub.RefCount = s.RefCount
+		sub.files = s.files
 		go func(h Handler) {
 			h.Serve9P(sub)
 			close(sub.pipeline)
@@ -48,11 +53,11 @@ func (handlers stack) Serve9P(s *Session) {
 	}
 
 Cleanup:
-	for _, h := range running {
-		close(h.requests)
+	for i := range running {
+		close(running[i].requests)
 
 		// Wait for the handler to exit
-		for range h.pipeline {
+		for range running[i].pipeline {
 		}
 	}
 }

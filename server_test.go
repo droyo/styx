@@ -50,7 +50,7 @@ type slowFile struct {
 	name    string
 }
 
-func (f slowFile) Read(p []byte) (int, error) {
+func (f *slowFile) Read(p []byte) (int, error) {
 	select {
 	case <-f.blockme:
 		return len(p), nil
@@ -60,13 +60,13 @@ func (f slowFile) Read(p []byte) (int, error) {
 }
 
 // os.FileInfo
-func (f slowFile) Mode() os.FileMode  { return 0 }
-func (f slowFile) IsDir() bool        { return false }
-func (f slowFile) Name() string       { return f.name }
-func (f slowFile) Sys() interface{}   { return nil }
-func (f slowFile) Size() int64        { return 100000 }
-func (f slowFile) ModTime() time.Time { return time.Now() }
-func (f slowFile) Close() error {
+func (f *slowFile) Mode() os.FileMode  { return 0 }
+func (f *slowFile) IsDir() bool        { return false }
+func (f *slowFile) Name() string       { return f.name }
+func (f *slowFile) Sys() interface{}   { return nil }
+func (f *slowFile) Size() int64        { return 100000 }
+func (f *slowFile) ModTime() time.Time { return time.Now() }
+func (f *slowFile) Close() error {
 	f.mu.Lock()
 	select {
 	case <-f.closeme:
@@ -299,10 +299,10 @@ func TestCancelRead(t *testing.T) {
 		for s.Next() {
 			switch req := s.Request().(type) {
 			case Twalk:
-				req.Rwalk(slowFile{}, nil)
+				req.Rwalk(&slowFile{}, nil)
 			case Topen:
 				// blockme is nil, will block reads forever
-				req.Ropen(slowFile{
+				req.Ropen(&slowFile{
 					name:    path.Base(req.Path()),
 					closeme: closeme,
 				}, nil)

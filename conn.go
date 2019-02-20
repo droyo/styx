@@ -221,7 +221,6 @@ func (c *conn) handleMessage(m styxproto.Msg) bool {
 		c.Flush()
 		return true
 	}
-	return true
 }
 
 // This is the first thing we do on a new connection. The first
