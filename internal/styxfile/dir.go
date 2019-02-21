@@ -37,13 +37,18 @@ func NewDir(dir Directory, abspath string, pool *qidpool.Pool) Interface {
 
 type dirReader struct {
 	Directory
-	offset int64
+	offset    int64 // current offset in the byte stream
+	nextlen   int   // if non zero, the length of next stat structure cached in next.
+	nextshort bool  // whether a short read occured on next
+	next      [styxproto.MaxStatLen]byte
 	sync.Mutex
 	pool *qidpool.Pool
 	path string
 }
 
-func (d *dirReader) ReadAt(p []byte, offset int64) (int, error) {
+func (d *dirReader) ReadAt(p []byte, offset int64) (written int, err error) {
+	// see Plan 9 man read(5): read must return an integral number
+	// of stat structures.
 	d.Lock()
 	defer d.Unlock()
 
@@ -51,49 +56,71 @@ func (d *dirReader) ReadAt(p []byte, offset int64) (int, error) {
 		return 0, ErrNoSeek
 	}
 
-	// NOTE(droyo) because we are being pessimistic about the
-	// size of filenames/usernames/etc, the below can result
-	// in us calling Readdir more times than we have to, especially
-	// if file/user names are normal size. This could be addressed
-	// by buffering Readdir's results.
-	nstats := len(p) / styxproto.MaxStatLen
-
-	if nstats == 0 {
-		return 0, ErrSmallRead
+	// We accept one short read
+	if d.nextlen > 0 {
+		if len(p) < d.nextlen {
+			if d.nextshort {
+				return 0, ErrSmallRead
+			} else {
+				// User buffer is too short,
+				// next read *must* be large enough
+				d.nextshort = true
+				return 0, nil
+			}
+		} else {
+			copy(p[:], d.next[:d.nextlen])
+			p = p[d.nextlen:]
+			written += d.nextlen
+			d.offset += int64(d.nextlen)
+			d.nextlen = 0
+			d.nextshort = false
+		}
 	}
 
-	files, err := d.Readdir(nstats)
-	n, marshalErr := marshalStats(p, files, d.path, d.pool)
-	d.offset += int64(n)
-	if marshalErr != nil {
-		return n, marshalErr
-	}
-	return n, err
-}
+	for len(p) > 0 {
+		nstats := len(p) / styxproto.MaxStatLen
+		if nstats == 0 {
+			nstats = 1
+		}
+		files, rerr := d.Readdir(nstats)
+		for _, fi := range files {
+			// Create 9p stat blob
+			uid, gid, muid := sys.FileOwner(fi)
+			stat, _, err := styxproto.NewStat(d.next[:], fi.Name(), uid, gid, muid)
+			if err != nil {
+				return written, err
+			}
+			mode := Mode9P(fi.Mode())
+			qtype := QidType(mode)
 
-func marshalStats(buf []byte, files []os.FileInfo, dir string, pool *qidpool.Pool) (int, error) {
-	var (
-		stat styxproto.Stat
-		n    = 0
-		err  error
-	)
-	for _, fi := range files {
-		uid, gid, muid := sys.FileOwner(fi)
-		stat, buf, err = styxproto.NewStat(buf, fi.Name(), uid, gid, muid)
-		if err != nil {
+			stat.SetMtime(uint32(fi.ModTime().Unix()))
+			stat.SetAtime(stat.Mtime())
+			stat.SetLength(fi.Size())
+			stat.SetMode(mode)
+			stat.SetQid(d.pool.Put(path.Join(d.path, fi.Name()), qtype))
+
+			if len(stat) > len(p) {
+				if nstats != 1 {
+					panic("impossible")
+				}
+				// Last entry overflows
+				d.nextlen = len(stat)
+				d.nextshort = false
+				return written, nil
+			}
+
+			n := copy(p, stat)
+			p = p[n:]
+			written += n
+			d.offset += int64(n)
+		}
+
+		if rerr != nil {
+			err = rerr
 			break
 		}
-		n += len(stat)
-		mode := Mode9P(fi.Mode())
-		qtype := QidType(mode)
-
-		stat.SetMtime(uint32(fi.ModTime().Unix()))
-		stat.SetAtime(stat.Mtime())
-		stat.SetLength(fi.Size())
-		stat.SetMode(mode)
-		stat.SetQid(pool.Put(path.Join(dir, fi.Name()), qtype))
 	}
-	return n, err
+	return written, err
 }
 
 func (d *dirReader) WriteAt(p []byte, offset int64) (int, error) {
