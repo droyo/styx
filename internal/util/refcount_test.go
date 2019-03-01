@@ -13,8 +13,6 @@ func (s *Session) end() {
 	case <-s.Requests:
 		return
 	}
-	println("ending session")
-	close(s.Requests)
 }
 
 func ExampleRefCount() {

@@ -52,7 +52,6 @@ func (l *PipeListener) Dial() (net.Conn, error) {
 	case l.incoming <- x:
 		return y, nil
 	}
-	panic("not reached")
 }
 
 // Close closes a PipeListener. The returned error will always
