@@ -7,8 +7,7 @@ import (
 func fileOwner(v interface{}) (uid, gid, muid string) {
 	uid = DefaultUid
 	gid = DefaultGid
-	//muid = DefaultMuid
-	muid = ""
+	muid = DefaultMuid
 
 	stat, ok := v.(*syscall.Dir)
 	if !ok {
