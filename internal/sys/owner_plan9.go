@@ -1,9 +1,14 @@
 package sys
 
+import (
+	"syscall"
+)
+
 func fileOwner(v interface{}) (uid, gid, muid string) {
 	uid = DefaultUid
 	gid = DefaultGid
-	muid = DefaultMuid
+	//muid = DefaultMuid
+	muid = ""
 
 	stat, ok := v.(*syscall.Dir)
 	if !ok {
