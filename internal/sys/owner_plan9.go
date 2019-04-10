@@ -1,5 +1,9 @@
 package sys
 
+import (
+	"syscall"
+)
+
 func fileOwner(v interface{}) (uid, gid, muid string) {
 	uid = DefaultUid
 	gid = DefaultGid
