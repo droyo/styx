@@ -65,8 +65,9 @@ func New(rwc interface{}) (Interface, error) {
 		return &dumbPipe{rwc: rwc}, nil
 	case io.Writer:
 		return &dumbPipe{rwc: rwc}, nil
+	default:
+		return nil, fmt.Errorf("Cannot convert type %T into a styxfile.Interface", rwc)
 	}
-	return nil, fmt.Errorf("Cannot convert type %T into a styxfile.Interface", rwc)
 }
 
 // SetDeadline sets read/write deadlines for a file, if the type supports it.
