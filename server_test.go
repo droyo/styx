@@ -1,6 +1,7 @@
 package styx
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func (f *slowFile) IsDir() bool        { return false }
 func (f *slowFile) Name() string       { return f.name }
 func (f *slowFile) Sys() interface{}   { return nil }
 func (f *slowFile) Size() int64        { return 100000 }
-func (f *slowFile) ModTime() time.Time { return time.Now() }
+func (f *slowFile) ModTime() time.Time { return time.Time{} }
 func (f *slowFile) Close() error {
 	f.mu.Lock()
 	select {
@@ -76,6 +77,35 @@ func (f *slowFile) Close() error {
 	f.mu.Unlock()
 	return nil
 }
+
+// A file system with nothing in it
+type emptyFS int
+
+func (emptyFS) Serve9P(s *Session) {
+	for s.Next() {
+		switch req := s.Request().(type) {
+		case Tstat:
+			if req.Path() == "/" {
+				req.Rstat(emptyDir(req.Path()), nil)
+			}
+		case Topen:
+			req.Ropen(emptyDir(req.Path()), nil)
+		}
+	}
+}
+
+type emptyDir string
+
+// os.FileInfo
+func (d emptyDir) Mode() os.FileMode  { return os.ModeDir }
+func (d emptyDir) IsDir() bool        { return d.Mode().IsDir() }
+func (d emptyDir) Name() string       { return string(d) }
+func (d emptyDir) Sys() interface{}   { return nil }
+func (d emptyDir) Size() int64        { return 0 }
+func (d emptyDir) ModTime() time.Time { return time.Time{} }
+
+// styx.Directory
+func (d emptyDir) Readdir(int) ([]os.FileInfo, error) { return nil, nil }
 
 func chanServer(t *testing.T, handler Handler) (in, out chan styxproto.Msg) {
 	var ln netutil.PipeListener
@@ -455,5 +485,84 @@ func TestWalk(t *testing.T) {
 
 	if count != len(elem) {
 		t.Errorf("Twalk(%q) generated %d, requests, wanted %d", walkPath, count, len(elem))
+	}
+}
+
+func blankQid() styxproto.Qid {
+	buf := make([]byte, styxproto.QidLen)
+	qid, _, err := styxproto.NewQid(buf, 0, 0, 0)
+	if err != nil {
+		panic(err)
+	}
+	return qid
+}
+
+// Tests that the Qid of the root folder is the same whether it's
+// got via Tattach, Tstat, Topen or Twalk
+func TestRootQid(t *testing.T) {
+	var numChecks int
+	isRootFid := make(map[uint32]bool)
+	rootQid := blankQid()
+
+	// T-message that specifies a file ID (FID)
+	type fcall interface {
+		styxproto.Msg
+		Fid() uint32
+	}
+	// R-message that specifies a file ID (QID)
+	type rqid interface {
+		styxproto.Msg
+		Qid() styxproto.Qid
+	}
+
+	srv := testServer{test: t}
+	srv.callback = func(req, rsp styxproto.Msg) {
+		if m, ok := req.(styxproto.Tattach); ok {
+			isRootFid[m.Fid()] = true
+		}
+		// Track clones of the root fid
+		if m, ok := req.(styxproto.Twalk); ok {
+			if m.Nwname() == 0 && isRootFid[m.Fid()] {
+				isRootFid[m.Newfid()] = true
+			}
+		}
+		if m, ok := req.(styxproto.Tclunk); ok {
+			delete(isRootFid, m.Fid())
+		}
+		if m, ok := rsp.(styxproto.Rattach); ok {
+			copy(rootQid, m.Qid())
+			t.Logf("root qid detected as %s", rootQid)
+		}
+
+		if m, ok := req.(fcall); ok {
+			var qid styxproto.Qid
+			switch r := rsp.(type) {
+			case styxproto.Rstat:
+				qid = r.Stat().Qid()
+			case rqid:
+				qid = r.Qid()
+			}
+			if qid != nil {
+				numChecks++
+				if isRootFid[m.Fid()] && !bytes.Equal(qid, rootQid) {
+					t.Errorf("root qid is %s, but %T request for %d got response %T %q",
+						rootQid, m, m.Fid(), rsp, qid)
+				}
+			}
+		}
+	}
+
+	srv.handler = emptyFS(0)
+
+	srv.runMsg(func(enc *styxproto.Encoder) {
+		enc.Twalk(1, 0, 1)
+		enc.Twalk(1, 1, 2)
+		enc.Twalk(1, 1, 3)
+		enc.Topen(1, 3, styxproto.OREAD)
+		enc.Tclunk(1, 3)
+		enc.Tstat(1, 2)
+	})
+	if numChecks == 0 {
+		t.Error("test cases did not fire")
 	}
 }
