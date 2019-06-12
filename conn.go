@@ -343,7 +343,7 @@ func (c *conn) handleTattach(ctx context.Context, m styxproto.Tattach) bool {
 	s.IncRef()
 	s.files.Put(m.Fid(), file{name: "/", rwc: nil})
 	c.clearTag(m.Tag())
-	c.Rattach(m.Tag(), c.qid(".", styxproto.QTDIR))
+	c.Rattach(m.Tag(), c.qid("/", styxproto.QTDIR))
 	return true
 }
 
