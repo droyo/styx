@@ -268,7 +268,7 @@ func (c *conn) acceptTversion() bool {
 // - close connections that have not established a session in N seconds
 func (c *conn) handleTauth(ctx context.Context, m styxproto.Tauth) bool {
 	var (
-		f interface{}
+		f   interface{}
 		err error
 	)
 	defer c.Flush()
@@ -331,7 +331,7 @@ func (c *conn) handleTattach(ctx context.Context, m styxproto.Tattach) bool {
 		s = newSession(c, m)
 	} else {
 		var (
-			ok bool
+			ok  bool
 			err error
 		)
 		s, ok = c.sessionByFid(m.Afid())

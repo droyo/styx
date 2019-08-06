@@ -1,30 +1,30 @@
 package factotum
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"os"
-	"bytes"
 	"log"
+	"os"
 
 	"aqwari.net/net/styx"
 )
 
 const (
 	//Factotum rpc responses
-	ARok = "ok"
-	ARdone = "done"
-	ARerror = "error"
-	ARbadkey = "badkey"
+	ARok       = "ok"
+	ARdone     = "done"
+	ARerror    = "error"
+	ARbadkey   = "badkey"
 	ARtoosmall = "toosmall"
-	ARphase = "phase"
-	ARneedkey = "needkey"
+	ARphase    = "phase"
+	ARneedkey  = "needkey"
 
 	//Factotum rpc commands
-	ARread = "read"
-	ARwrite = "write"
+	ARread     = "read"
+	ARwrite    = "write"
 	ARauthinfo = "authinfo"
-	ARstart = "start"
+	ARstart    = "start"
 
 	AuthRpcMax = 4096
 )
@@ -92,7 +92,7 @@ func (a *AuthRpc) do(verb string, b []byte) (string, []byte, error) {
 func (a *AuthRpc) ReadAt(b []byte, off int64) (int, error) {
 	ret, resp, err := a.do(ARread, b)
 	if err != nil {
-		return 0, err 
+		return 0, err
 	}
 	switch ret {
 	default:
@@ -139,7 +139,7 @@ func Start(proto string) (styx.AuthFunc, styx.AuthOpenFunc) {
 		if !ok {
 			return errors.New("cast to AuthRpc failed")
 		}
-		ret, _, err := a.do("read", []byte{})
+		ret, _, err := a.do(ARread, []byte{})
 		if err != nil {
 			return err
 		}
@@ -155,7 +155,7 @@ func Start(proto string) (styx.AuthFunc, styx.AuthOpenFunc) {
 		}
 		a := &AuthRpc{f}
 
-		ret, _, err := a.do("start", []byte(s))
+		ret, _, err := a.do(ARstart, []byte(s))
 		if err != nil {
 			return nil, err
 		}
