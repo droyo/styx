@@ -16,6 +16,8 @@ type Logger interface {
 	Printf(string, ...interface{})
 }
 
+type AuthOpenFunc func() (interface{}, error)
+
 // A Server defines parameters for running a 9P server. The
 // zero value of a Server is usable as a 9P server, and will
 // use the defaults set by the styx package.
@@ -41,6 +43,9 @@ type Server struct {
 	// Auth is used to authenticate user sessions. If nil,
 	// authentication is disabled.
 	Auth AuthFunc
+
+	// OpenAuth is used to open file to authentication agent
+	OpenAuth AuthOpenFunc
 
 	// If not nil, ErrorLog will be used to log unexpected
 	// errors accepting or handling connections. TraceLog,
