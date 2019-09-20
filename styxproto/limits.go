@@ -7,7 +7,7 @@ const maxInt = int(^uint(0) >> 1)
 // things, we set some limits on how big any of these fields can be.
 
 // Minimum size of a message
-var minSizeLUT = [...]int{
+var minSizeLUT = [...]uint32{
 	msgTversion: 13,             // size[4] Tversion tag[2] msize[4] version[s]
 	msgRversion: 13,             // size[4] Rversion tag[2] mversion[s]
 	msgTauth:    15,             // size[4] Tauth tag[2] afid[4] uname[s] aname[s]
@@ -38,7 +38,7 @@ var minSizeLUT = [...]int{
 }
 
 // Maximum size of a message
-var maxSizeLUT = [...]int{
+var maxSizeLUT = [...]uint32{
 	msgTversion: minSizeLUT[msgTversion] + MaxVersionLen,
 	msgRversion: minSizeLUT[msgRversion] + MaxVersionLen,
 	msgTauth:    minSizeLUT[msgTauth] + MaxUidLen + MaxAttachLen,

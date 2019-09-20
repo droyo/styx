@@ -48,7 +48,7 @@ func (enc *Encoder) Tversion(msize uint32, version string) {
 	if len(version) > MaxVersionLen {
 		version = version[:MaxVersionLen]
 	}
-	size := uint32(minSizeLUT[msgTversion] + len(version))
+	size := minSizeLUT[msgTversion] + uint32(len(version))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -63,7 +63,7 @@ func (enc *Encoder) Rversion(msize uint32, version string) {
 	if len(version) > MaxVersionLen {
 		version = version[:MaxVersionLen]
 	}
-	size := uint32(minSizeLUT[msgRversion] + len(version))
+	size := minSizeLUT[msgRversion] + uint32(len(version))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -82,7 +82,7 @@ func (enc *Encoder) Tauth(tag uint16, afid uint32, uname, aname string) {
 	if len(aname) > MaxAttachLen {
 		aname = aname[:MaxAttachLen]
 	}
-	size := uint32(minSizeLUT[msgTauth] + len(uname) + len(aname))
+	size := minSizeLUT[msgTauth] + uint32(len(uname)) + uint32(len(aname))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -113,7 +113,7 @@ func (enc *Encoder) Tattach(tag uint16, fid, afid uint32, uname, aname string) {
 	if len(aname) > MaxAttachLen {
 		aname = aname[:MaxAttachLen]
 	}
-	size := uint32(minSizeLUT[msgTattach] + len(uname) + len(aname))
+	size := minSizeLUT[msgTattach] + uint32(len(uname)) + uint32(len(aname))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -145,7 +145,7 @@ func (enc *Encoder) Rerror(tag uint16, errfmt string, v ...interface{}) {
 	if len(ename) > MaxErrorLen {
 		ename = ename[:MaxErrorLen]
 	}
-	size := uint32(minSizeLUT[msgRerror] + len(ename))
+	size := minSizeLUT[msgRerror] + uint32(len(ename))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -208,7 +208,7 @@ func (enc *Encoder) Rwalk(tag uint16, wqid ...Qid) error {
 	if len(wqid) > MaxWElem {
 		return errMaxWElem
 	}
-	size := uint32(minSizeLUT[msgRwalk] + 13*len(wqid))
+	size := minSizeLUT[msgRwalk] + uint32(13*len(wqid))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -249,7 +249,7 @@ func (enc *Encoder) Tcreate(tag uint16, fid uint32, name string, perm uint32, mo
 	if len(name) > MaxFilenameLen {
 		name = name[:MaxFilenameLen]
 	}
-	size := uint32(minSizeLUT[msgTcreate] + len(name))
+	size := minSizeLUT[msgTcreate] + uint32(len(name))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -330,7 +330,7 @@ func (enc *Encoder) Rread(tag uint16, data []byte) (n int, err error) {
 // Twrite writes a Twrite message to the underlying io.Writer. An error is returned
 // if the message cannot fit inside a single 9P message.
 func (enc *Encoder) Twrite(tag uint16, fid uint32, offset int64, data []byte) (int, error) {
-	if math.MaxUint32-minSizeLUT[msgTwrite] < len(data) {
+	if math.MaxUint32-uint32(minSizeLUT[msgTwrite]) < uint32(len(data)) {
 		return 0, errTooBig
 	}
 	size := uint32(minSizeLUT[msgTwrite]) + uint32(len(data))
@@ -419,7 +419,7 @@ func (enc *Encoder) Rstat(tag uint16, stat Stat) {
 	if len(stat) < minStatLen {
 		panic(errShortStat)
 	}
-	size := uint32((minSizeLUT[msgRstat] - minStatLen) + len(stat))
+	size := minSizeLUT[msgRstat] - uint32(minStatLen) + uint32(len(stat))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
@@ -438,7 +438,7 @@ func (enc *Encoder) Twstat(tag uint16, fid uint32, stat Stat) {
 	if len(stat) < minStatLen {
 		panic(errShortStat)
 	}
-	size := uint32(minSizeLUT[msgTwstat] + 2 + len(stat))
+	size := minSizeLUT[msgTwstat] + uint32(2 + len(stat))
 
 	enc.mu.Lock()
 	defer enc.mu.Unlock()

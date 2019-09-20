@@ -83,7 +83,7 @@ func (s *Decoder) readFixed() (Msg, error) {
 	msg := msg(s.dot())
 	msgSize, msgType := msg.Len(), msg.Type()
 
-	msg, err := s.growdot(int(msgSize))
+	msg, err := s.growdot(uint32(msgSize))
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (s *Decoder) readRW() (Msg, error) {
 		readSize = int(msgSize)
 	}
 
-	msg, err = s.growdot(readSize)
+	msg, err = s.growdot(uint32(readSize))
 	if err != nil {
 		// we have already buffered IOHeaderSize bytes, so
 		// we are reading from the bufio.Reader's internal buffer.
@@ -152,7 +152,7 @@ func (s *Decoder) badMessage(bad msg, reason error) (Msg, error) {
 	// from hurting performance for others on the same connection.
 	if s.dotlen() > int(length) {
 		s.shrinkdot(s.dotlen() - int(length))
-	} else if _, err := s.growdot(int(length)); err != nil {
+	} else if _, err := s.growdot(uint32(length)); err != nil {
 		panic(err)
 	}
 	s.mark()
