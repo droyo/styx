@@ -296,46 +296,44 @@ func (s *Session) handleTread(ctx context.Context, msg styxproto.Tread, file fil
 		return true
 	}
 
+	// TODO(droyo) allocations could hurt here, come up with a better
+	// way to do this (after measuring the impact, of course). The tricky bit
+	// here is inherent to the 9P protocol; rather than using sentinel values,
+	// each message is prefixed with its length. While this is generally a Good
+	// Thing, this means we can't write directly to the connection, because
+	// we don't know how much we are going to write until it's too late.
+	buf := make([]byte, int(msg.Count()))
+
+	if t, ok := ctx.Deadline(); ok {
+		styxfile.SetDeadline(file.rwc, t)
+	}
+	done := make(chan struct{})
 	go func() {
-		// TODO(droyo) allocations could hurt here, come up with a better
-		// way to do this (after measuring the impact, of course). The tricky bit
-		// here is inherent to the 9P protocol; rather than using sentinel values,
-		// each message is prefixed with its length. While this is generally a Good
-		// Thing, this means we can't write directly to the connection, because
-		// we don't know how much we are going to write until it's too late.
-		buf := make([]byte, int(msg.Count()))
-
-		if t, ok := ctx.Deadline(); ok {
-			styxfile.SetDeadline(file.rwc, t)
-		}
-		done := make(chan struct{})
-		go func() {
-			n, err = file.rwc.ReadAt(buf, msg.Offset())
-			close(done)
-		}()
-		select {
-		case <-ctx.Done():
-			// NOTE(droyo) deciding what to do here is somewhat
-			// difficult. Many (but not all) Read/Write calls in Go can
-			// be interrupted by calling Close. Obviously, calling Close
-			// on a file will disrupt any current and future reads on the
-			// same fid. However, that is preferrable to leaking goroutines.
-			file.rwc.Close()
-			s.conn.clearTag(msg.Tag())
-			return
-		case <-done:
-		}
-
-		s.conn.clearTag(msg.Tag())
-		if n > 0 {
-			s.conn.Rread(msg.Tag(), buf[:n])
-		} else if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			s.conn.Rerror(msg.Tag(), "%v", err)
-		} else {
-			s.conn.Rread(msg.Tag(), buf[:n])
-		}
-		s.conn.Flush()
+		n, err = file.rwc.ReadAt(buf, msg.Offset())
+		close(done)
 	}()
+	select {
+	case <-ctx.Done():
+		// NOTE(droyo) deciding what to do here is somewhat
+		// difficult. Many (but not all) Read/Write calls in Go can
+		// be interrupted by calling Close. Obviously, calling Close
+		// on a file will disrupt any current and future reads on the
+		// same fid. However, that is preferrable to leaking goroutines.
+		file.rwc.Close()
+		s.conn.clearTag(msg.Tag())
+		return false
+	case <-done:
+	}
+
+	s.conn.clearTag(msg.Tag())
+	if n > 0 {
+		s.conn.Rread(msg.Tag(), buf[:n])
+	} else if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		s.conn.Rerror(msg.Tag(), "%v", err)
+	} else {
+		s.conn.Rread(msg.Tag(), buf[:n])
+	}
+	s.conn.Flush()
 	return true
 }
 
