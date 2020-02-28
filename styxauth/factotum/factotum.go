@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log"
-	"os"
 
 	"aqwari.net/net/styx"
 )
@@ -38,7 +38,7 @@ var ErrUnknownRpc = errors.New("Unknown rpc")
 var ErrBotchRpc = errors.New("authrpc botch")
 
 type AuthRpc struct {
-	*os.File
+	io.ReadWriteCloser
 }
 
 //See /sys/src/libauth/auth_rpc.c:/^classify/
@@ -127,7 +127,9 @@ func (a *AuthRpc) Close() error {
 	return nil
 }
 
-func Start(proto string) (styx.AuthFunc, styx.AuthOpenFunc) {
+// Start takes your proto (ie p9any), and a readwritecloser (on Plan9, this would be a fd to /mnt/factotum/rpc)
+// And returns a ready to use AuthFunc and AuthOpenFunc
+func Start(proto string, f io.ReadWriteCloser) (styx.AuthFunc, styx.AuthOpenFunc) {
 	s := fmt.Sprintf("proto=%s role=server", proto)
 
 	af := func(rwc *styx.Channel, user, access string) error {
@@ -149,10 +151,6 @@ func Start(proto string) (styx.AuthFunc, styx.AuthOpenFunc) {
 		return nil
 	}
 	aof := func() (interface{}, error) {
-		f, err := os.OpenFile("/mnt/factotum/rpc", os.O_RDWR, 0755)
-		if err != nil {
-			return nil, nil
-		}
 		a := &AuthRpc{f}
 
 		ret, _, err := a.do(ARstart, []byte(s))
