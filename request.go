@@ -156,7 +156,7 @@ func (t Topen) Ropen(rwc interface{}, err error) {
 	}
 
 	if err != nil {
-		t.session.conn.srv.logf("%s open %s failed: %s", t.path, err)
+		t.session.conn.srv.logf("open %s failed: %s", t.path, err)
 
 		// Don't want to expose too many implementation details
 		// to clients.

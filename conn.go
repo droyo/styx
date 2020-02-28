@@ -149,7 +149,7 @@ func newConn(srv *Server, rwc io.ReadWriteCloser) *conn {
 		Encoder:    enc,
 		srv:        srv,
 		rwc:        rwc,
-		ctx:        context.TODO(),
+		ctx:        context.Background(),
 		msize:      msize,
 		sessionFid: threadsafe.NewMap(),
 		pendingReq: threadsafe.NewMap(),
@@ -267,6 +267,10 @@ func (c *conn) acceptTversion() bool {
 // - Setting a per-connection session limit
 // - close connections that have not established a session in N seconds
 func (c *conn) handleTauth(ctx context.Context, m styxproto.Tauth) bool {
+	var (
+		f   interface{}
+		err error
+	)
 	defer c.Flush()
 	if c.srv.Auth == nil {
 		c.clearTag(m.Tag())
@@ -278,25 +282,38 @@ func (c *conn) handleTauth(ctx context.Context, m styxproto.Tauth) bool {
 		c.Rerror(m.Tag(), "fid %x in use", m.Afid())
 		return true
 	}
-	client, server := net.Pipe()
-	ch := &Channel{
-		Context:         c.ctx,
-		ReadWriteCloser: server,
+	s := newSession(c, m)
+
+	if c.srv.OpenAuth == nil {
+		var server net.Conn
+		f, server = net.Pipe()
+		ch := &Channel{
+			Context:         c.ctx,
+			ReadWriteCloser: server,
+		}
+		go func() {
+			s.authC <- c.srv.Auth(ch, s.User, s.Access)
+			close(s.authC)
+		}()
+	} else {
+		f, err = c.srv.OpenAuth()
+		if err != nil {
+			c.clearTag(m.Tag())
+			c.Rerror(m.Tag(), "styx.Server.OpenAuth: %s", err.Error())
+			return true
+		}
+		c.ctx = context.WithValue(c.ctx, "Auth", f)
 	}
-	rwc, err := styxfile.New(client)
+	rwc, err := styxfile.New(f)
 	if err != nil {
 		// This should never happen
 		panic(err)
 	}
-	s := newSession(c, m)
-	go func() {
-		s.authC <- c.srv.Auth(ch, s.User, s.Access)
-		close(s.authC)
-	}()
-
-	c.sessionFid.Put(m.Afid(), s)
 	s.files.Put(m.Afid(), file{rwc: rwc, auth: true})
+	c.sessionFid.Put(m.Afid(), s)
 	s.IncRef()
+	c.clearTag(m.Tag())
+	c.Rauth(m.Tag(), c.qid("auth", styxproto.QTAUTH))
 	return true
 }
 
@@ -313,13 +330,15 @@ func (c *conn) handleTattach(ctx context.Context, m styxproto.Tattach) bool {
 	if c.srv.Auth == nil {
 		s = newSession(c, m)
 	} else {
-		// TODO(droyo) when a transport-based authentication scheme
-		// is in use, the client should not have to do a Tauth request.
-		// We should call the Auth handler if Afid is NOFID, passing it
-		// a util.BlackHole.
-		if !c.sessionFid.Fetch(s, m.Afid()) {
+		var (
+			ok  bool
+			err error
+		)
+		s, ok = c.sessionByFid(m.Afid())
+		if !ok {
 			c.clearTag(m.Tag())
-			c.Rerror(m.Tag(), "invalid afid %x", m.Afid())
+			c.Rerror(m.Tag(), "%s", errNoFid)
+			c.Flush()
 			return true
 		}
 		// From attach(5): The same validated afid may be used for
@@ -329,7 +348,12 @@ func (c *conn) handleTattach(ctx context.Context, m styxproto.Tattach) bool {
 			c.Rerror(m.Tag(), "afid mismatch for %s on %s", m.Uname(), m.Aname())
 			return true
 		}
-		if err := <-s.authC; err != nil {
+		if c.srv.OpenAuth == nil {
+			err = <-s.authC
+		} else {
+			err = c.srv.Auth(&Channel{c.ctx, nil}, s.User, s.Access)
+		}
+		if err != nil {
 			c.clearTag(m.Tag())
 			c.Rerror(m.Tag(), "auth failed: %s", err)
 			return true
@@ -343,7 +367,7 @@ func (c *conn) handleTattach(ctx context.Context, m styxproto.Tattach) bool {
 	s.IncRef()
 	s.files.Put(m.Fid(), file{name: "/", rwc: nil})
 	c.clearTag(m.Tag())
-	c.Rattach(m.Tag(), c.qid(".", styxproto.QTDIR))
+	c.Rattach(m.Tag(), c.qid("/", styxproto.QTDIR))
 	return true
 }
 
