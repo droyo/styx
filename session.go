@@ -296,7 +296,12 @@ func (s *Session) handleTread(ctx context.Context, msg styxproto.Tread, file fil
 		return true
 	}
 
-	go func() {
+	// Create a copy so that execution can proceed and s.conn.Next can be
+	// called without cloberring the Rread request.
+	msgCopy := styxproto.Tread(make([]byte, msg.Len()))
+	copy(msgCopy, msg)
+
+	go func(msg styxproto.Tread) {
 		// TODO(droyo) allocations could hurt here, come up with a better
 		// way to do this (after measuring the impact, of course). The tricky bit
 		// here is inherent to the 9P protocol; rather than using sentinel values,
@@ -335,7 +340,7 @@ func (s *Session) handleTread(ctx context.Context, msg styxproto.Tread, file fil
 			s.conn.Rread(msg.Tag(), buf[:n])
 		}
 		s.conn.Flush()
-	}()
+	}(msgCopy)
 	return true
 }
 
