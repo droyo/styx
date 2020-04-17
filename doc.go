@@ -19,7 +19,7 @@ Serve9P method.  The HandlerFunc type allows regular functions to be used:
 			case styx.Topen:
 				msg.Ropen(os.OpenFile(msg.Path(), msg.Flag, 0777))
 			case styx.Tstat:
-				msg.Rstat(os.Stat(msg.Path())
+				msg.Rstat(os.Stat(msg.Path()))
 			}
 		}
 	})
