@@ -13,8 +13,8 @@ import (
 // for files on a 9P file server. A Pool must be created
 // with a call to New.
 type Pool struct {
-	m    *threadsafe.Map
 	path uint64
+	m    *threadsafe.Map
 }
 
 // New returns a new, empty Pool.
