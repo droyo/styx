@@ -1,6 +1,11 @@
 package styxproto
 
-const maxInt = int(^uint(0) >> 1)
+import (
+	"math"
+)
+
+const maxInt64 = math.MaxInt64
+const maxInt32 = math.MaxInt32
 
 // Validating messages becomes more complicated if we allow arbitrarily-long
 // values for some of the non-fixed fields in a message.  To simplify
