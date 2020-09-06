@@ -22,11 +22,6 @@ import (
 // a user may perform multiple operations on multiple files. Multiple
 // sessions may be multiplexed over a single connection.
 type Session struct {
-	// This tracks the number of fids pointing to this session in
-	// conn.sessionFid. We need to know when all references are gone
-	// so we can properly close any session channels.
-	util.RefCount
-
 	// User is the name of the user associated with the session.
 	// When establishing a session, the client provides a username, This
 	// may or may not be authenticated, depending on the Server in use.
@@ -67,6 +62,11 @@ type Session struct {
 
 	// Underlying connection this session takes place on.
 	*conn
+
+	// This tracks the number of fids pointing to this session in
+	// conn.sessionFid. We need to know when all references are gone
+	// so we can properly close any session channels.
+	util.RefCount
 
 	// Open (or unopened) files, indexed by fid.
 	files *threadsafe.Map

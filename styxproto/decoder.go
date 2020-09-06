@@ -149,11 +149,11 @@ func (s *Decoder) resetdot() {
 	s.start, s.pos = 0, 0
 }
 
-func (s *Decoder) advance(n uint32) {
-	if uint32(s.buflen()) < n {
+func (s *Decoder) advance(n int) {
+	if s.buflen() < n {
 		panic("advance decoder out of bounds")
 	}
-	s.pos = int(uint32(s.pos) +  n)
+	s.pos += n
 }
 
 func (s *Decoder) shrinkdot(n int) {
@@ -179,11 +179,11 @@ func (s *Decoder) dotlen() int {
 
 // extends dot to be n bytes long, performing
 // IO if necessary. returns dot
-func (s *Decoder) growdot(n uint32) ([]byte, error) {
-	if err := s.fill(n - uint32(s.dotlen())); err != nil {
+func (s *Decoder) growdot(n int) ([]byte, error) {
+	if err := s.fill(n - s.dotlen()); err != nil {
 		return nil, err
 	}
-	s.advance(n - uint32(s.dotlen()))
+	s.advance(n - s.dotlen())
 	return s.dot(), nil
 }
 
@@ -192,7 +192,7 @@ func (s *Decoder) fill(n uint32) error {
 	if uint32(maxInt32 - n) < uint32(s.pos) {
 		return errFillOverflow
 	}
-	_, err := s.br.Peek(int(uint32(s.pos) + n))
+	_, err := s.br.Peek(s.pos + n)
 	return err
 }
 
