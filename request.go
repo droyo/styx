@@ -68,7 +68,7 @@ func (info reqInfo) handled() bool {
 }
 
 func (info reqInfo) defaultResponse() {
-	info.Rerror("permission denied.")
+	info.Rerror("permission denied")
 }
 
 // Context returns the context associated with the request.
