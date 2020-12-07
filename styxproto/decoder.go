@@ -188,8 +188,8 @@ func (s *Decoder) growdot(n int) ([]byte, error) {
 }
 
 // guarantees that s.buflen() >= n if error is nil
-func (s *Decoder) fill(n int) error {
-	if maxInt-n < s.pos {
+func (s *Decoder) fill(n uint32) error {
+	if uint32(maxInt32 - n) < uint32(s.pos) {
 		return errFillOverflow
 	}
 	_, err := s.br.Peek(s.pos + n)
