@@ -42,6 +42,7 @@ func (p *Pool) Put(name string, qtype uint8) styxproto.Qid {
 			m[name] = qid
 		}
 	})
+
 	p.m.Put(name, qid)
 	return qid
 }

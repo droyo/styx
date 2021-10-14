@@ -3,7 +3,6 @@ package styx
 import (
 	"os"
 	"path"
-
 	"context"
 
 	"aqwari.net/net/styx/internal/styxfile"
@@ -266,6 +265,7 @@ func (t Tcreate) Rcreate(rwc interface{}, err error) {
 	}
 
 	if dir, ok := rwc.(Directory); t.Mode.IsDir() && ok {
+
 		f = styxfile.NewDir(dir, path.Join(t.Path(), t.Name), t.session.conn.qidpool)
 	} else {
 		f, err = styxfile.New(rwc)
