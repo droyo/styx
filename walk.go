@@ -1,11 +1,11 @@
 package styx
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"strings"
-	"errors"
 
 	"context"
 

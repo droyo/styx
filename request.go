@@ -1,9 +1,9 @@
 package styx
 
 import (
+	"context"
 	"os"
 	"path"
-	"context"
 
 	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/internal/sys"
