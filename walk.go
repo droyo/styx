@@ -1,6 +1,7 @@
 package styx
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -180,7 +181,12 @@ func (t Twalk) Rwalk(info os.FileInfo, err error) {
 	var mode os.FileMode
 	if err == nil {
 		mode = info.Mode()
-		qid = t.session.conn.qid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
+		fqid, found := t.session.conn.getQid(t.Path(), styxfile.QidType(styxfile.Mode9P(mode)))
+		if !found {
+			err = errors.New("rwalk did not find file")
+		} else {
+			qid = fqid
+		}
 	}
 	t.walk.filled[t.index] = 1
 	elem := walkElem{qid: qid, index: t.index, err: err}
