@@ -130,6 +130,8 @@ func Stat(buf []byte, file Interface, name string, qid styxproto.Qid) (styxproto
 	return stat, nil
 }
 
+// FIXME: When statGuess is used with a styxfile.Directory, none of the stat methods are found,
+// and we fall back on incorrectly using guessed values every time.
 type statGuess struct {
 	file  Interface
 	name  string
