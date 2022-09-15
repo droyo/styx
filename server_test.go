@@ -488,6 +488,34 @@ func TestWalk(t *testing.T) {
 	}
 }
 
+func TestWalkNonexistent(t *testing.T) {
+	srv := testServer{test: t}
+	srv.callback = func(req, rsp styxproto.Msg) {
+		if _, ok := req.(styxproto.Twalk); ok {
+			if _, ok := rsp.(styxproto.Rerror); !ok {
+				t.Errorf("expected Rerror response to nonexistent Twalk, instead got: %T", rsp)
+			}
+		}
+	}
+	srv.handler = HandlerFunc(func(s *Session) {
+		for s.Next() {
+			switch req := s.Request().(type) {
+			case Twalk:
+				t.Logf("Twalk %s", req.Path())
+				req.Rwalk(nil, errors.New("not found"))
+				// If the walk resulted in an error, then no Qid should have been created for this path
+				if _, ok := s.conn.qidpool.Get(req.Path()); ok {
+					t.Error("qid was created when it shouldn't have been")
+				}
+			}
+		}
+	})
+
+	srv.runMsg(func(enc *styxproto.Encoder) {
+		enc.Twalk(1, 0, 1, "nonexistent")
+	})
+}
+
 func blankQid() styxproto.Qid {
 	buf := make([]byte, styxproto.QidLen)
 	qid, _, err := styxproto.NewQid(buf, 0, 0, 0)

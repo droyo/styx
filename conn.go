@@ -161,10 +161,6 @@ func (c *conn) qid(name string, qtype uint8) styxproto.Qid {
 	return c.qidpool.Put(name, qtype)
 }
 
-func (c *conn) getQid(name string, qtype uint8) (styxproto.Qid, bool) {
-	return c.qidpool.Get(name)
-}
-
 // All request contexts must have their cancel functions
 // called, to free up resources in the context. Returns false
 // if the tag is already cancelled
