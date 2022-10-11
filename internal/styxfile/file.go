@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"aqwari.net/net/styx/internal/sys"
@@ -110,6 +111,10 @@ func Stat(buf []byte, file Interface, name string, qid styxproto.Qid) (styxproto
 			return nil, err
 		}
 	} else {
+		// name is an absolute path, make sure we don't pass an absolute path to statGuess,
+		// otherwise we may get back an absolute path if the file does not have a Name() method,
+		// which would be incorrect since stat names cannot contain slashes.
+		name := filepath.Base(name)
 		fi = statGuess{file, name, qid.Type()}
 	}
 	uid, gid, muid := sys.FileOwner(fi)
@@ -125,6 +130,8 @@ func Stat(buf []byte, file Interface, name string, qid styxproto.Qid) (styxproto
 	return stat, nil
 }
 
+// FIXME: When statGuess is used with a styxfile.Directory, none of the stat methods are found,
+// and we fall back on incorrectly using guessed values every time.
 type statGuess struct {
 	file  Interface
 	name  string

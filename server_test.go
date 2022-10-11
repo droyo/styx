@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"aqwari.net/net/styx/internal/netutil"
+	"aqwari.net/net/styx/internal/styxfile"
 	"aqwari.net/net/styx/styxproto"
 )
 
@@ -86,25 +87,46 @@ func (emptyFS) Serve9P(s *Session) {
 		switch req := s.Request().(type) {
 		case Tstat:
 			if req.Path() == "/" {
-				req.Rstat(emptyDir(req.Path()), nil)
+				req.Rstat(emptyDir{emptyStatDir(req.Path())}, nil)
 			}
 		case Topen:
-			req.Ropen(emptyDir(req.Path()), nil)
+			req.Ropen(emptyDir{emptyStatDir(req.Path())}, nil)
 		}
 	}
 }
 
-type emptyDir string
+type emptyStatFile string
 
-// os.FileInfo
-func (d emptyDir) Mode() os.FileMode  { return os.ModeDir }
-func (d emptyDir) IsDir() bool        { return d.Mode().IsDir() }
-func (d emptyDir) Name() string       { return string(d) }
-func (d emptyDir) Sys() interface{}   { return nil }
-func (d emptyDir) Size() int64        { return 0 }
-func (d emptyDir) ModTime() time.Time { return time.Time{} }
+// fs.FileInfo
+func (s emptyStatFile) Mode() os.FileMode  { return 0222 }
+func (s emptyStatFile) IsDir() bool        { return s.Mode().IsDir() }
+func (s emptyStatFile) Name() string       { return string(s) }
+func (s emptyStatFile) Sys() interface{}   { return nil }
+func (s emptyStatFile) Size() int64        { return 0 }
+func (s emptyStatFile) ModTime() time.Time { return time.Time{} }
 
-// styx.Directory
+type emptyStatDir string
+
+// fs.FileInfo
+func (s emptyStatDir) Mode() os.FileMode  { return 0222 | os.ModeDir }
+func (s emptyStatDir) IsDir() bool        { return s.Mode().IsDir() }
+func (s emptyStatDir) Name() string       { return string(s) }
+func (s emptyStatDir) Sys() interface{}   { return nil }
+func (s emptyStatDir) Size() int64        { return 0 }
+func (s emptyStatDir) ModTime() time.Time { return time.Time{} }
+
+type emptyFile struct{ emptyStatFile }
+
+var _ styxfile.Interface = emptyFile{}
+
+func (f emptyFile) ReadAt(p []byte, offset int64) (written int, err error) { return 0, io.EOF }
+func (f emptyFile) WriteAt(p []byte, offset int64) (int, error)            { return 0, styxfile.ErrNotSupported }
+func (f emptyFile) Close() error                                           { return nil }
+
+type emptyDir struct{ emptyStatDir }
+
+var _ styxfile.Directory = emptyDir{}
+
 func (d emptyDir) Readdir(int) ([]os.FileInfo, error) { return nil, nil }
 
 func chanServer(t *testing.T, handler Handler) (in, out chan styxproto.Msg) {
@@ -486,6 +508,70 @@ func TestWalk(t *testing.T) {
 	if count != len(elem) {
 		t.Errorf("Twalk(%q) generated %d, requests, wanted %d", walkPath, count, len(elem))
 	}
+}
+
+func TestTcreate(t *testing.T) {
+	srv := testServer{test: t}
+
+	type expectedstat struct {
+		name string
+		mode os.FileMode
+	}
+	fidnames := map[uint32]expectedstat{
+		1: {name: "dir", mode: 0222 | os.ModeDir},
+		2: {name: "file", mode: 0222},
+	}
+
+	srv.callback = func(req, rsp styxproto.Msg) {
+		if _, ok := rsp.(styxproto.Rerror); ok {
+			t.Errorf("got %T response to %T", rsp, req)
+		}
+		if req, ok := req.(styxproto.Tstat); ok {
+			if rsp, ok := rsp.(styxproto.Rstat); !ok {
+				t.Errorf("got %T response to %T", rsp, req)
+			} else {
+				expected := fidnames[req.Fid()]
+				name := string(rsp.Stat().Name())
+				if name != expected.name {
+					t.Errorf("expected name to be %s, instead got %s", expected.name, name)
+				}
+				// FIXME: For directories, the mode does not match
+				mode := styxfile.ModeOS(rsp.Stat().Mode())
+				if mode != expected.mode {
+					t.Errorf("expected mode to be %s, instead got %s", expected.mode, mode)
+				}
+			}
+		}
+	}
+	srv.handler = HandlerFunc(func(s *Session) {
+		for s.Next() {
+			switch req := s.Request().(type) {
+			case Tcreate:
+				t.Logf("Tcreate %s %s", req.Path(), req.NewPath())
+				var f any
+				if req.Mode.IsDir() {
+					f = emptyDir{emptyStatDir(req.Name)}
+				} else {
+					f = emptyFile{emptyStatFile(req.Name)}
+				}
+				req.Rcreate(f, nil)
+			case Twalk:
+				// Empty walks get automatically handled, no need to handle
+			case Tstat:
+				// Because Rcreate returns an opened file, Tstat is called on styxfile.Interface or styxfile.Directory,
+				// so it will use styxfile.Stat to get stat, no need to handle
+			}
+		}
+	})
+
+	srv.runMsg(func(enc *styxproto.Encoder) {
+		enc.Twalk(1, 0, 1)
+		enc.Tcreate(1, 1, "dir", 0222|styxproto.DMDIR, styxproto.DMREAD)
+		enc.Tstat(1, 1)
+		enc.Twalk(1, 0, 2)
+		enc.Tcreate(1, 2, "file", 0222, styxproto.DMREAD)
+		enc.Tstat(1, 2)
+	})
 }
 
 func blankQid() styxproto.Qid {
